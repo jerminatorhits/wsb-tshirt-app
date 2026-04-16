@@ -53,7 +53,7 @@ export async function POST(request: NextRequest) {
         },
         sync_variants: [
           {
-            variant_id: 4011, // Gildan 64000 Unisex Softstyle T-Shirt
+            variant_id: 4011, // Bella + Canvas 3001 (product 71) White S
             retail_price: '24.99',
             files: [
               {

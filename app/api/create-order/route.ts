@@ -1,55 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import FormData from 'form-data'
-
-// Printful product variant IDs for Gildan 64000 Unisex Softstyle T-Shirt
-const VARIANT_MAP: Record<string, Record<string, number>> = {
-  white: {
-    XS: 4011,
-    S: 4012,
-    M: 4013,
-    L: 4014,
-    XL: 4015,
-    '2XL': 4016,
-    '3XL': 4017,
-  },
-  black: {
-    XS: 4018,
-    S: 4019,
-    M: 4020,
-    L: 4021,
-    XL: 4022,
-    '2XL': 4023,
-    '3XL': 4024,
-  },
-  navy: {
-    XS: 4025,
-    S: 4026,
-    M: 4027,
-    L: 4028,
-    XL: 4029,
-    '2XL': 4030,
-    '3XL': 4031,
-  },
-  gray: {
-    XS: 4032,
-    S: 4033,
-    M: 4034,
-    L: 4035,
-    XL: 4036,
-    '2XL': 4037,
-    '3XL': 4038,
-  },
-  red: {
-    XS: 4039,
-    S: 4040,
-    M: 4041,
-    L: 4042,
-    XL: 4043,
-    '2XL': 4044,
-    '3XL': 4045,
-  },
-}
+import { getVariantId } from '@/lib/printful-variants'
 
 export async function POST(request: NextRequest) {
   try {
@@ -73,10 +25,9 @@ export async function POST(request: NextRequest) {
       })
     }
 
-    // Get variant ID
-    const variantId = VARIANT_MAP[color]?.[size]
-    
-    if (!variantId) {
+    // Get variant ID (product 71 Bella + Canvas 3001)
+    const variantId = getVariantId(color, size)
+    if (variantId === undefined) {
       return NextResponse.json(
         { error: `Variant not found for size ${size} and color ${color}` },
         { status: 400 }

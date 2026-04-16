@@ -42,19 +42,23 @@ interface PaymentFormProps {
     color: string
     quantity: number
   }
+  /** When provided, use this PaymentIntent (no creation); used by Checkout for one-PI-per-checkout flow */
+  clientSecret?: string
+  /** When true, keep submit disabled (e.g. fulfillment in progress); prevents double-submit */
+  submitDisabled?: boolean
 }
 
-function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, clientSecret }: PaymentFormProps & { clientSecret: string }) {
+function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, clientSecret, submitDisabled }: PaymentFormProps & { clientSecret: string }) {
   const stripe = useStripe()
   const elements = useElements()
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
-  
+  const isProcessing = loading || submitDisabled
+
   // Reset loading when onError is called (for fulfillment failures)
-  // This ensures the button becomes clickable again
   const originalOnError = onError
   const wrappedOnError = (error: string) => {
-    setLoading(false) // Reset loading state
+    setLoading(false)
     originalOnError(error)
   }
 
@@ -140,10 +144,7 @@ function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, 
           finalShippingInfo.email = (paymentIntent as any).charges?.data?.[0]?.billing_details?.email || ''
         }
 
-        // Payment succeeded - call onSuccess
-        // Reset loading state here since payment is complete
-        // Fulfillment happens separately in the parent component
-        setLoading(false)
+        // Payment succeeded - call onSuccess; keep loading true until fulfillment completes or errors (parent will call onError)
         onSuccess(paymentIntent.id, finalShippingInfo)
       } else {
         setLoading(false)
@@ -195,16 +196,16 @@ function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, 
 
       <button
         type="submit"
-        disabled={!stripe || loading}
+        disabled={!stripe || isProcessing}
         className="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold text-lg shadow-lg"
       >
-        {loading ? (
+        {isProcessing ? (
           <span className="flex items-center justify-center">
             <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            Processing Payment...
+            {submitDisabled ? 'Processing order...' : 'Processing Payment...'}
           </span>
         ) : (
           `Pay $${amount.toFixed(2)}`
@@ -224,33 +225,32 @@ function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, 
 export default function PaymentForm(props: PaymentFormProps) {
   const [stripeKey, setStripeKey] = useState<string | null>(null)
   const [clientSecret, setClientSecret] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(!props.clientSecret)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    // Mark as client-side
-    // Get the key on client side
     const key = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ''
-    console.log('Stripe publishable key:', key ? 'Found' : 'Missing')
     setStripeKey(key)
 
-    // Create payment intent when component mounts
+    // When parent provides clientSecret (Checkout flow), use it and do not create another PaymentIntent
+    if (props.clientSecret) {
+      setClientSecret(props.clientSecret)
+      setLoading(false)
+      return
+    }
+
     const createPaymentIntent = async () => {
       try {
         const response = await fetch('/api/create-payment-intent', {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
+          headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            amount: Math.round(props.amount * 100), // Convert to cents
+            amount: Math.round(props.amount * 100),
             shipping: props.shippingInfo,
             orderDetails: props.orderDetails,
           }),
         })
-
         const data = await response.json()
-
         if (data.error || !data.clientSecret) {
           setError(data.error || 'Failed to initialize payment')
           setLoading(false)
@@ -264,17 +264,15 @@ export default function PaymentForm(props: PaymentFormProps) {
       }
     }
 
-    if (key) {
-      createPaymentIntent()
-    } else {
-      setLoading(false)
-    }
+    if (key) createPaymentIntent()
+    else setLoading(false)
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []) // Create payment intent once when component mounts
+  }, [props.clientSecret])
 
-  // Build options with clientSecret when available
+  const effectiveClientSecret = props.clientSecret ?? clientSecret
+
   const getOptions = (): StripeElementsOptions => ({
-    clientSecret: clientSecret || undefined,
+    clientSecret: effectiveClientSecret || undefined,
     appearance: {
       theme: 'stripe',
       variables: {
@@ -291,7 +289,7 @@ export default function PaymentForm(props: PaymentFormProps) {
     // Apple Pay, Google Pay, and Link will be shown automatically if available
   })
 
-  if (loading) {
+  if (loading && !effectiveClientSecret) {
     return (
       <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
         <div className="flex items-center justify-center">
@@ -333,7 +331,7 @@ export default function PaymentForm(props: PaymentFormProps) {
     )
   }
 
-  if (!clientSecret) {
+  if (!effectiveClientSecret) {
     return (
       <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
         <p className="text-sm text-red-800 dark:text-red-200">
@@ -345,7 +343,7 @@ export default function PaymentForm(props: PaymentFormProps) {
 
   return (
     <Elements stripe={stripePromise} options={getOptions()}>
-      <CheckoutForm {...props} orderDetails={props.orderDetails} clientSecret={clientSecret!} />
+      <CheckoutForm {...props} orderDetails={props.orderDetails} clientSecret={effectiveClientSecret} />
     </Elements>
   )
 }

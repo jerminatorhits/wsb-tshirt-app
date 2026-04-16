@@ -1,22 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
-import OpenAI from 'openai'
-import axios from 'axios'
 import { getCachedDesign, saveDesignToCache } from '@/lib/cache'
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || '',
-})
-
-// Determine which AI provider to use (default: stability-ai)
-const AI_PROVIDER = process.env.AI_PROVIDER || 'stability-ai'
+// Pollinations.ai - Free AI Image Generator
+// Get your API key at https://enter.pollinations.ai (sign in with GitHub)
+// With API key: No rate limits! Without: ~60 second cooldown between requests
 
 export async function POST(request: NextRequest) {
-  // Parse request body once and store it
+  const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY
+  // Parse request body
   let topic = 'Trending Topic'
-  let requestBody: any = {}
   
   try {
-    requestBody = await request.json()
+    const requestBody = await request.json()
     topic = requestBody.topic || topic
   } catch {
     // If parsing fails, use default topic
@@ -29,116 +24,108 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  // Check cache first
+  // Check cache first - cached results bypass rate limits!
   const cachedDesign = await getCachedDesign(topic)
   if (cachedDesign) {
     return NextResponse.json({
       success: true,
       design: cachedDesign,
-      provider: cachedDesign.provider || 'cached',
+      provider: 'cached',
       fromCache: true,
     })
   }
 
-  // Generate a prompt for the T-shirt design
-  const designPrompt = `A trendy, eye-catching T-shirt design for "${topic}". Bold and modern design suitable for printing on a T-shirt. Include text and graphics. Visually appealing with vibrant colors. Style: modern, minimalist, trendy. Square design suitable for T-shirt printing.`
+  // Generate a prompt for the graphic design (NOT a t-shirt mockup)
+  const designPrompt = `${topic}, graphic design artwork, bold modern streetwear style, vibrant colors, clean edges, standalone design for merchandise printing, no mockup, no clothing, white background`
 
-  // Try Stability AI first (cheaper), then fallback to OpenAI
-  let imageUrl = ''
-  let errorMessage = ''
-  let providerUsed = ''
+  console.log('Generating image with Pollinations.ai...')
+  console.log('API Key configured:', !!POLLINATIONS_API_KEY)
+  console.log('Prompt:', designPrompt)
+  
+  if (!POLLINATIONS_API_KEY) {
+    console.log('⚠️ No POLLINATIONS_API_KEY - using anonymous tier (rate limited)')
+    console.log('Get your free API key at: https://enter.pollinations.ai')
+  }
 
-  // Debug: Check which provider and keys are configured
-  console.log('AI Provider:', AI_PROVIDER)
-  console.log('Stability API Key configured:', !!process.env.STABILITY_API_KEY)
-  console.log('OpenAI API Key configured:', !!process.env.OPENAI_API_KEY)
+  try {
+    // Pollinations.ai has a simple URL-based API
+    const encodedPrompt = encodeURIComponent(designPrompt)
+    
+    // Add parameters for better quality
+    const seed = Math.floor(Math.random() * 1000000)
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1024&height=1024&seed=${seed}&nologo=true`
 
-  // Try Stability AI (Stable Diffusion) - Much cheaper!
-  if (AI_PROVIDER === 'stability-ai' && process.env.STABILITY_API_KEY) {
-    try {
-      providerUsed = 'stability-ai'
+    // Actually fetch the image to detect rate limits
+    console.log('Fetching image from Pollinations...', POLLINATIONS_API_KEY ? '(with API key)' : '(anonymous)')
+    
+    // Build headers - include API key if available for no rate limits
+    const headers: Record<string, string> = {}
+    if (POLLINATIONS_API_KEY) {
+      headers['Authorization'] = `Bearer ${POLLINATIONS_API_KEY}`
+    }
+    
+    const imageResponse = await fetch(imageUrl, {
+      headers,
+      signal: AbortSignal.timeout(120000), // 2 minute timeout for generation
+    })
+
+    // Check for rate limit in response headers or text
+    const contentType = imageResponse.headers.get('content-type') || ''
+    
+    // If it's not an image, it might be a rate limit error
+    if (!contentType.includes('image')) {
+      const errorText = await imageResponse.text()
+      console.log('Non-image response:', errorText)
       
-      // Use Stability AI v1 generation endpoint
-      const stabilityResponse = await axios.post(
-        'https://api.stability.ai/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image',
-        {
-          text_prompts: [
-            {
-              text: designPrompt,
-              weight: 1,
-            },
-          ],
-          cfg_scale: 7,
-          height: 1024,
-          width: 1024,
-          samples: 1,
-          steps: 30,
-        },
-        {
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-            'Authorization': `Bearer ${process.env.STABILITY_API_KEY}`,
-          },
-        }
-      )
-
-      // Stability AI returns base64 image in the response
-      if (stabilityResponse.data?.artifacts && stabilityResponse.data.artifacts.length > 0) {
-        const base64Image = stabilityResponse.data.artifacts[0].base64
-        imageUrl = `data:image/png;base64,${base64Image}`
-      }
-    } catch (error: any) {
-      // Better error logging
-      const errorData = error.response?.data
-      if (errorData) {
-        try {
-          const errorText = Buffer.isBuffer(errorData) 
-            ? errorData.toString() 
-            : typeof errorData === 'string' 
-            ? errorData 
-            : JSON.stringify(errorData)
-          console.warn('Stability AI error:', errorText)
-          errorMessage = errorText
-        } catch {
-          console.warn('Stability AI error:', error.message)
-          errorMessage = error.message
-        }
-      } else {
-        console.warn('Stability AI error:', error.message)
-        errorMessage = error.message
-      }
-      // Will fallback to OpenAI or placeholder
+      // Try to extract wait time from error message
+      const waitMatch = errorText.match(/after (\d+) seconds/i)
+      const waitSeconds = waitMatch ? parseInt(waitMatch[1]) : 60
+      
+      return NextResponse.json({
+        success: false,
+        error: 'Rate limited by Pollinations',
+        rateLimited: true,
+        waitSeconds: waitSeconds,
+        message: `Pollinations.ai rate limit - please wait ${waitSeconds} seconds. Get a free API key at enter.pollinations.ai to remove limits!`,
+        needsApiKey: !POLLINATIONS_API_KEY,
+      }, { status: 429 })
     }
-  }
 
-  // Fallback to OpenAI DALL-E if Stability AI failed or not configured
-  if (!imageUrl && process.env.OPENAI_API_KEY) {
-    try {
-      providerUsed = 'openai'
-      const openaiResponse = await openai.images.generate({
-        model: 'dall-e-3',
-        prompt: designPrompt,
-        size: '1024x1024',
-        quality: 'standard',
-        n: 1,
-      })
-      imageUrl = openaiResponse.data?.[0]?.url || ''
-    } catch (error: any) {
-      console.warn('OpenAI error:', error.message)
-      errorMessage = error.message
+    // Check if response is actually an error image (Pollinations returns images with error text)
+    // We'll check the response size - error images are typically small
+    const imageBuffer = await imageResponse.arrayBuffer()
+    
+    // If the image is very small (< 10KB), it might be an error placeholder
+    if (imageBuffer.byteLength < 10000) {
+      // Try to detect if this is a rate limit by checking the raw bytes for text
+      const text = new TextDecoder().decode(imageBuffer.slice(0, 500))
+      if (text.includes('too many requests') || text.includes('rate limit')) {
+        const waitMatch = text.match(/after (\d+) seconds/i)
+        const waitSeconds = waitMatch ? parseInt(waitMatch[1]) : 60
+        
+        return NextResponse.json({
+          success: false,
+          error: 'Rate limited by Pollinations',
+          rateLimited: true,
+          waitSeconds: waitSeconds,
+          message: `Pollinations.ai rate limit - please wait ${waitSeconds} seconds.`,
+        }, { status: 429 })
+      }
     }
-  }
 
-  // If we got an image, return it and cache it
-  if (imageUrl) {
+    // Convert to base64 for caching
+    const base64Image = Buffer.from(imageBuffer).toString('base64')
+    const dataUrl = `data:${contentType};base64,${base64Image}`
+    
+    console.log('Pollinations.ai success! Image size:', imageBuffer.byteLength, 'bytes')
+
     const design = {
       id: `design-${Date.now()}`,
       topic,
-      imageUrl,
+      imageUrl: dataUrl, // Store as base64 data URL for reliable caching
       prompt: designPrompt,
       createdAt: new Date().toISOString(),
-      provider: providerUsed,
+      provider: 'pollinations',
     }
 
     // Save to cache for future use
@@ -147,27 +134,24 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       design,
-      provider: providerUsed,
+      provider: 'pollinations',
     })
+  } catch (error: any) {
+    console.error('Pollinations.ai error:', error)
+    
+    // Check if it's a timeout error
+    if (error.name === 'TimeoutError' || error.message?.includes('timeout')) {
+      return NextResponse.json({
+        success: false,
+        error: 'Image generation timed out',
+        details: 'Pollinations.ai took too long to respond. Please try again.',
+      }, { status: 504 })
+    }
+    
+    return NextResponse.json({
+      success: false,
+      error: 'Failed to generate image with Pollinations.ai',
+      details: error.message,
+    }, { status: 500 })
   }
-
-  // No API keys configured or both failed - return placeholder
-  const hasAnyKey = process.env.STABILITY_API_KEY || process.env.OPENAI_API_KEY
-  const message = !hasAnyKey
-    ? 'No AI API keys configured. Using placeholder design. Add STABILITY_API_KEY or OPENAI_API_KEY to generate real designs.'
-    : `AI generation failed: ${errorMessage}. Using placeholder design.`
-
-  return NextResponse.json({
-    success: true,
-    design: {
-      id: `design-${Date.now()}`,
-      topic,
-      imageUrl: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=800&h=800&fit=crop',
-      prompt: `A trendy T-shirt design featuring "${topic}" with modern graphics and bold typography`,
-      createdAt: new Date().toISOString(),
-    },
-    message,
-    isFallback: true,
-  })
 }
-

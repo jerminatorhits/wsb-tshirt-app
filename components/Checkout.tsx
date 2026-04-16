@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { GeneratedDesign } from '@/app/page'
+import { GeneratedDesign, COLORS, ColorOption } from '@/app/page'
 import PaymentForm from './PaymentForm'
 import ExpressCheckout from './ExpressCheckout'
 import { Elements } from '@stripe/react-stripe-js'
@@ -14,20 +14,14 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 interface CheckoutProps {
   design: GeneratedDesign
   designTitle: string
+  selectedColor: ColorOption
+  onColorChange: (color: ColorOption) => void
 }
 
 const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
-const COLORS = [
-  { name: 'White', value: 'white', hex: '#FFFFFF' },
-  { name: 'Black', value: 'black', hex: '#000000' },
-  { name: 'Navy', value: 'navy', hex: '#1E3A5F' },
-  { name: 'Gray', value: 'gray', hex: '#808080' },
-  { name: 'Red', value: 'red', hex: '#DC2626' },
-]
 
-export default function Checkout({ design, designTitle }: CheckoutProps) {
+export default function Checkout({ design, designTitle, selectedColor, onColorChange }: CheckoutProps) {
   const [size, setSize] = useState('M')
-  const [color, setColor] = useState(COLORS[0])
   const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -35,6 +29,8 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
   const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null)
+  /** Set when payment succeeded but fulfill-order failed; allows resubmit with corrected address without confirming payment again */
+  const [succeededPaymentIntentId, setSucceededPaymentIntentId] = useState<string | null>(null)
   const [shippingInfo, setShippingInfo] = useState({
     name: '',
     email: '',
@@ -53,47 +49,6 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
   const subtotal = basePrice * quantity
   const totalPrice = (subtotal + shippingCost).toFixed(2)
 
-  // Create payment intent early so express checkout buttons can appear
-  useEffect(() => {
-    const createPaymentIntent = async () => {
-      try {
-        const response = await fetch('/api/create-payment-intent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            amount: Math.round(parseFloat(totalPrice) * 100),
-            shipping: shippingInfo,
-            orderDetails: {
-              designId: design.id,
-              imageUrl: design.imageUrl,
-              title: designTitle,
-              size,
-              color: color.value,
-              quantity,
-            },
-          }),
-        })
-
-        const data = await response.json()
-        
-        if (data.clientSecret) {
-          console.log('Payment intent created successfully for express checkout')
-          setPaymentIntentClientSecret(data.clientSecret)
-        } else {
-          console.error('No clientSecret in response:', data)
-        }
-      } catch (err) {
-        console.error('Failed to create payment intent for express checkout:', err)
-      }
-    }
-
-    // Create payment intent when component mounts or when order details change
-    // Note: We don't include shippingInfo in deps to avoid recreating on every keystroke
-    createPaymentIntent()
-  }, [size, color.value, quantity, totalPrice, design.id, design.imageUrl, designTitle])
-
   // Initialize checkout when component mounts
   useEffect(() => {
     const initializeCheckout = async () => {
@@ -109,7 +64,7 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
             imageUrl: design.imageUrl,
             title: designTitle,
             size,
-            color: color.value,
+            color: selectedColor.value,
             quantity,
           }),
         })
@@ -125,16 +80,63 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
     }
 
     initializeCheckout()
-  }, [design.id, design.imageUrl, designTitle, size, color.value, quantity])
+  }, [design.id, design.imageUrl, designTitle, size, selectedColor.value, quantity])
 
   const handleCompleteOrder = async () => {
-    // For express payment methods (Apple Pay, Google Pay), shipping info will come from the payment method
-    // For regular card payments, we need shipping info
-    // We'll allow proceeding even if shipping info is incomplete - it will be filled from payment method if available
-    // Show payment form
-    console.log('Showing payment form...')
-    setShowPaymentForm(true)
     setError(null)
+    // Validate address before showing payment so we don't charge for unfulfillable orders
+    if (showShippingForm && (shippingInfo.address || shippingInfo.zip)) {
+      setLoading(true)
+      try {
+        const res = await fetch('/api/validate-address', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(shippingInfo),
+        })
+        const data = await res.json()
+        if (!data.valid) {
+          setError(data.error || 'Please correct your address.')
+          setLoading(false)
+          return
+        }
+      } catch {
+        setError('Could not validate address. Please try again.')
+        setLoading(false)
+        return
+      }
+      setLoading(false)
+    }
+    setShowPaymentForm(true)
+    // Create a single PaymentIntent only when user continues to payment (one order in Stripe)
+    setLoading(true)
+    try {
+      const response = await fetch('/api/create-payment-intent', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          amount: Math.round(parseFloat(totalPrice) * 100),
+          shipping: shippingInfo,
+          orderDetails: {
+            designId: design.id,
+            imageUrl: design.imageUrl,
+            title: designTitle,
+            size,
+            color: selectedColor.value,
+            quantity,
+          },
+        }),
+      })
+      const data = await response.json()
+      if (data.clientSecret) {
+        setPaymentIntentClientSecret(data.clientSecret)
+      } else {
+        setError(data.error || 'Could not initialize payment. Please try again.')
+      }
+    } catch (err) {
+      setError('Could not initialize payment. Please try again.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   const handlePaymentSuccess = async (paymentIntentId: string, paymentShippingInfo?: any) => {
@@ -157,7 +159,7 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
           imageUrl: design.imageUrl,
           title: designTitle,
           size,
-          color: color.value,
+          color: selectedColor.value,
           quantity,
           shipping: finalShippingInfo,
         }),
@@ -176,7 +178,7 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
         const errorMsg = data.error || 'Payment succeeded but order fulfillment failed. Please contact support.'
         setError(errorMsg)
         setLoading(false)
-        // Also call handlePaymentError to reset PaymentForm's loading state
+        setSucceededPaymentIntentId(paymentIntentId) // Payment already succeeded; next submit should only retry fulfillment
         handlePaymentError(errorMsg)
         console.error('Fulfillment error:', errorMsg)
       }
@@ -235,9 +237,9 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
             {COLORS.map((c) => (
               <button
                 key={c.value}
-                onClick={() => setColor(c)}
+                onClick={() => onColorChange(c)}
                 className={`w-12 h-12 rounded-full border-4 transition-all ${
-                  color.value === c.value
+                  selectedColor.value === c.value
                     ? 'border-blue-600 scale-110 shadow-lg'
                     : 'border-gray-300 dark:border-gray-600 hover:scale-105'
                 }`}
@@ -247,7 +249,7 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
             ))}
           </div>
           <p className="text-sm text-gray-600 dark:text-gray-400 mt-2">
-            Selected: {color.name}
+            Selected: {selectedColor.name}
           </p>
         </div>
 
@@ -301,29 +303,32 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
           </div>
         </div>
 
-        {/* Express Checkout - Right after price summary, before proceed button */}
-        {paymentIntentClientSecret && stripePromise ? (
-          <Elements stripe={stripePromise} options={{ clientSecret: paymentIntentClientSecret }}>
-            <ExpressCheckout
-              amount={parseFloat(totalPrice)}
-              onSuccess={handlePaymentSuccess}
-              onError={handlePaymentError}
-              orderDetails={{
-                designId: design.id,
-                imageUrl: design.imageUrl,
-                title: designTitle,
-                size,
-                color: color.value,
-                quantity,
-              }}
-              clientSecret={paymentIntentClientSecret}
-            />
-          </Elements>
-        ) : (
-          <div className="mb-4 text-xs text-gray-500 dark:text-gray-400">
-            {!paymentIntentClientSecret && 'Loading payment options...'}
-            {!stripePromise && 'Stripe not configured'}
-          </div>
+        {/* Express Checkout - only after "Continue to Payment"; hidden when resubmitting after fulfillment failure */}
+        {showPaymentForm && !succeededPaymentIntentId && (
+          paymentIntentClientSecret && stripePromise ? (
+            <Elements stripe={stripePromise} options={{ clientSecret: paymentIntentClientSecret }}>
+              <ExpressCheckout
+                amount={parseFloat(totalPrice)}
+                onSuccess={handlePaymentSuccess}
+                onError={handlePaymentError}
+                orderDetails={{
+                  designId: design.id,
+                  imageUrl: design.imageUrl,
+                  title: designTitle,
+                  size,
+                  color: selectedColor.value,
+                  quantity,
+                }}
+                clientSecret={paymentIntentClientSecret}
+                disabled={loading}
+              />
+            </Elements>
+          ) : (
+            <div className="mb-4 text-xs text-gray-500 dark:text-gray-400">
+              {loading ? 'Preparing payment...' : !paymentIntentClientSecret && !error ? 'Loading payment options...' : null}
+              {!stripePromise && 'Stripe not configured'}
+            </div>
+          )
         )}
 
         {/* Error Message */}
@@ -396,8 +401,37 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
           </div>
         )}
 
-        {/* Payment Form */}
-        {showPaymentForm && !paymentSuccess && (
+        {/* After payment succeeded but fulfillment failed: show corrected-address resubmit (no payment form) */}
+        {succeededPaymentIntentId && (
+          <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
+            <div className="mb-4 p-4 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+              <p className="text-sm text-amber-800 dark:text-amber-200">
+                Payment was successful. Update your address above if needed, then click below to resubmit your order. You will not be charged again.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => handlePaymentSuccess(succeededPaymentIntentId, shippingInfo)}
+              disabled={loading}
+              className="w-full px-6 py-4 bg-gradient-to-r from-green-600 to-emerald-600 text-white rounded-lg hover:from-green-700 hover:to-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-semibold text-lg"
+            >
+              {loading ? (
+                <span className="flex items-center justify-center">
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Submitting...
+                </span>
+              ) : (
+                'Submit corrected address'
+              )}
+            </button>
+          </div>
+        )}
+
+        {/* Payment Form (only when payment has not already succeeded and we have a single clientSecret) */}
+        {showPaymentForm && paymentIntentClientSecret && !paymentSuccess && !succeededPaymentIntentId && (
           <div className="pt-4 border-t border-gray-200 dark:border-gray-700">
             <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Payment Information</h3>
             {!showShippingForm && (
@@ -429,9 +463,11 @@ export default function Checkout({ design, designTitle }: CheckoutProps) {
                 imageUrl: design.imageUrl,
                 title: designTitle,
                 size,
-                color: color.value,
+                color: selectedColor.value,
                 quantity,
               }}
+              clientSecret={paymentIntentClientSecret}
+              submitDisabled={loading}
             />
           </div>
         )}

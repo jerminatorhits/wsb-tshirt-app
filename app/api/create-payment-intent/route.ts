@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { validateShippingAddress } from '@/lib/validate-address'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
@@ -16,8 +17,19 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Shipping info is optional - it can come from Apple Pay/Google Pay
+    // Shipping info is optional for express checkout (Apple Pay/Google Pay provide it)
     const shippingData = shipping || {}
+
+    // Validate address before creating PaymentIntent so we don't charge for unfulfillable orders
+    if (shippingData.address || shippingData.zip) {
+      const validation = validateShippingAddress(shippingData)
+      if (!validation.valid) {
+        return NextResponse.json(
+          { error: validation.error },
+          { status: 400 }
+        )
+      }
+    }
 
     if (!process.env.STRIPE_SECRET_KEY) {
       return NextResponse.json(

@@ -16,6 +16,8 @@ interface ExpressCheckoutProps {
     quantity: number
   }
   clientSecret: string | null
+  /** When true, keep buttons disabled (e.g. fulfillment in progress); prevents double-submit */
+  disabled?: boolean
 }
 
 export default function ExpressCheckout({ 
@@ -23,13 +25,25 @@ export default function ExpressCheckout({
   onSuccess, 
   onError, 
   orderDetails,
-  clientSecret 
+  clientSecret,
+  disabled: disabledByParent = false,
 }: ExpressCheckoutProps) {
   const stripe = useStripe()
   const [paymentRequest, setPaymentRequest] = useState<any>(null)
   const [canMakePayment, setCanMakePayment] = useState(false)
   const [paymentMethods, setPaymentMethods] = useState<{applePay: boolean, googlePay: boolean}>({applePay: false, googlePay: false})
   const [loading, setLoading] = useState(false)
+  const isDisabled = loading || disabledByParent
+
+  const wrappedOnError = (msg: string) => {
+    setLoading(false)
+    onError(msg)
+  }
+
+  // When parent stops loading (fulfillment done or failed), reset so buttons aren't stuck disabled
+  useEffect(() => {
+    if (!disabledByParent) setLoading(false)
+  }, [disabledByParent])
 
   useEffect(() => {
     if (!stripe || !clientSecret) {
@@ -100,8 +114,7 @@ export default function ExpressCheckout({
 
         if (confirmError) {
           ev.complete('fail')
-          onError(confirmError.message || 'Payment failed')
-          setLoading(false)
+          wrappedOnError(confirmError.message || 'Payment failed')
         } else {
           ev.complete('success')
 
@@ -125,8 +138,7 @@ export default function ExpressCheckout({
             // Handle 3D Secure or other actions
             const { error: actionError, paymentIntent: updatedPaymentIntent } = await stripe.confirmCardPayment(clientSecret!)
             if (actionError) {
-              onError(actionError.message || 'Payment authentication failed')
-              setLoading(false)
+              wrappedOnError(actionError.message || 'Payment authentication failed')
             } else if (updatedPaymentIntent && updatedPaymentIntent.status === 'succeeded') {
               onSuccess(updatedPaymentIntent.id, finalShippingInfo)
             }
@@ -134,8 +146,7 @@ export default function ExpressCheckout({
         }
       } catch (err: any) {
         ev.complete('fail')
-        onError(err.message || 'An error occurred')
-        setLoading(false)
+        wrappedOnError(err.message || 'An error occurred')
       }
     })
     // onSuccess and onError are stable callbacks from parent, don't need to be in deps
@@ -143,7 +154,7 @@ export default function ExpressCheckout({
   }, [stripe, clientSecret, amount, orderDetails])
 
   const handleExpressPayment = () => {
-    if (paymentRequest && !loading) {
+    if (paymentRequest && !isDisabled) {
       paymentRequest.show()
     }
   }
@@ -200,7 +211,7 @@ export default function ExpressCheckout({
           <button
             type="button"
             onClick={handleExpressPayment}
-            disabled={loading}
+            disabled={isDisabled}
             className="flex items-center justify-center gap-3 px-6 py-4 bg-black text-white rounded-lg hover:bg-gray-800 transition-colors font-semibold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
@@ -213,7 +224,7 @@ export default function ExpressCheckout({
           <button
             type="button"
             onClick={handleExpressPayment}
-            disabled={loading}
+            disabled={isDisabled}
             className="flex items-center justify-center gap-3 px-6 py-4 bg-white text-gray-800 rounded-lg border-2 border-gray-300 hover:border-gray-400 transition-colors font-semibold shadow-md hover:shadow-lg disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <svg className="w-6 h-6" viewBox="0 0 24 24">
