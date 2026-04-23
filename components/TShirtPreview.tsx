@@ -126,11 +126,11 @@ export default function TShirtPreview({ design, topic, selectedColor, onColorCha
       </h2>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4">
-        <div className="flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80 p-4">
+        <div className="flex min-h-[220px] min-w-0 flex-1 items-center justify-center overflow-hidden rounded-xl border border-zinc-800 bg-zinc-950/80 p-4 sm:min-h-[280px]">
           {blankLoading ? (
             <p className="text-sm text-zinc-500">Loading shirt mockup…</p>
           ) : blankShirtUrl ? (
-            <div className="relative aspect-square max-h-full w-full max-w-sm mx-auto">
+            <div className="relative mx-auto aspect-square w-full max-w-md">
               {!previewError ? (
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
               ) : (
