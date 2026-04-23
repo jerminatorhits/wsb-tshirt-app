@@ -130,7 +130,7 @@ export default function TShirtPreview({ design, topic, selectedColor, onColorCha
           {blankLoading ? (
             <p className="text-sm text-zinc-500">Loading shirt mockup…</p>
           ) : blankShirtUrl ? (
-            <div className="relative mx-auto aspect-square w-full max-w-md">
+            <div className="relative mx-auto aspect-[4/5] w-full max-w-[22rem] sm:aspect-square sm:max-w-md">
               {!previewError ? (
                 <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
               ) : (
