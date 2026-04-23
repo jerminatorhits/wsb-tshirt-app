@@ -216,7 +216,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl shadow-black/40 backdrop-blur-sm ${className}`}
+      className={`flex h-full min-h-0 flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 ${className}`}
     >
       <h2 className="mb-4 shrink-0 text-xl font-black uppercase tracking-wide text-zinc-100">🛒 Secure the bag</h2>
 

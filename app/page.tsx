@@ -383,7 +383,7 @@ export default function Home() {
 
         <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
           <div className="flex h-full min-h-0 min-w-0 flex-col">
-            <div className="flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-zinc-800 bg-zinc-900/80 p-6 shadow-xl shadow-black/40 backdrop-blur-sm">
+            <div className="flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30">
               <h2 className="shrink-0 text-xl font-bold uppercase tracking-wide text-zinc-200">
                 YOLO your design
               </h2>
