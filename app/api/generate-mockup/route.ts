@@ -1,12 +1,45 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import { PRINTFUL_PRODUCT_ID, VARIANT_ID_M_BY_COLOR } from '@/lib/printful-variants'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { basicAbuseCheck } from '@/lib/abuse-protection'
 
 // Product 71 = Bella + Canvas 3001 Unisex Staple T-Shirt
 const TSHIRT_PRODUCT_ID = PRINTFUL_PRODUCT_ID
 
 export async function POST(request: NextRequest) {
   try {
+    const abuse = basicAbuseCheck(request)
+    if (!abuse.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Request blocked',
+          mockupUrl: null,
+        },
+        { status: 400 }
+      )
+    }
+
+    const rl = checkRateLimit(request, {
+      key: 'generate-mockup',
+      windowMs: 60_000,
+      max: 10,
+    })
+    if (!rl.ok) {
+      return NextResponse.json(
+        {
+          success: false,
+          error: 'Too many mockup requests. Please wait a moment and try again.',
+          mockupUrl: null,
+        },
+        {
+          status: 429,
+          headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+        }
+      )
+    }
+
     const { imageUrl, color = 'white' } = await request.json()
 
     if (!imageUrl) {

@@ -1,11 +1,42 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCachedDesign, saveDesignToCache } from '@/lib/cache'
+import { checkRateLimit } from '@/lib/rate-limit'
+import { basicAbuseCheck } from '@/lib/abuse-protection'
 
 // Pollinations.ai - Free AI Image Generator
 // Get your API key at https://enter.pollinations.ai (sign in with GitHub)
 // With API key: No rate limits! Without: ~60 second cooldown between requests
 
 export async function POST(request: NextRequest) {
+  const abuse = basicAbuseCheck(request)
+  if (!abuse.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Request blocked',
+      },
+      { status: 400 }
+    )
+  }
+
+  const rl = checkRateLimit(request, {
+    key: 'generate-design',
+    windowMs: 60_000,
+    max: 8,
+  })
+  if (!rl.ok) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: 'Too many design generations. Please wait a moment and try again.',
+      },
+      {
+        status: 429,
+        headers: { 'Retry-After': String(rl.retryAfterSeconds) },
+      }
+    )
+  }
+
   const POLLINATIONS_API_KEY = process.env.POLLINATIONS_API_KEY
   // Parse request body
   let topic = 'Trending Topic'

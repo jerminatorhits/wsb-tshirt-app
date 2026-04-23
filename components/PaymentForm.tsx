@@ -46,9 +46,25 @@ interface PaymentFormProps {
   clientSecret?: string
   /** When true, keep submit disabled (e.g. fulfillment in progress); prevents double-submit */
   submitDisabled?: boolean
+  /**
+   * Render only the form under an existing parent `<Elements>`. (Avoids double-wrapping with Elements.)
+   * When true, Apple/Google Pay in PaymentElement is hidden; use PaymentOptions for wallets.
+   */
+  useParentElements?: boolean
+  /** When true (default with useParentElements), Apple Pay and Google Pay are not shown inside PaymentElement */
+  cardOnlyWallets?: boolean
 }
 
-function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, clientSecret, submitDisabled }: PaymentFormProps & { clientSecret: string }) {
+function CheckoutForm({
+  amount,
+  onSuccess,
+  onError,
+  shippingInfo,
+  orderDetails,
+  clientSecret,
+  submitDisabled,
+  cardOnlyWallets = true,
+}: PaymentFormProps & { clientSecret: string; cardOnlyWallets?: boolean }) {
   const stripe = useStripe()
   const elements = useElements()
   const [loading, setLoading] = useState(false)
@@ -166,7 +182,7 @@ function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, 
         <PaymentElement
           options={{
             layout: {
-              type: 'tabs',
+              type: 'accordion',
               defaultCollapsed: false,
             },
             // Hide optional fields (email, phone) to reduce noise
@@ -178,12 +194,15 @@ function CheckoutForm({ amount, onSuccess, onError, shippingInfo, orderDetails, 
                 address: 'auto',
               },
             },
-            // Payment methods are automatically enabled via automatic_payment_methods in the PaymentIntent
-            // Apple Pay, Google Pay will appear automatically when available
-            // Shipping address will be automatically requested from Apple Pay/Google Pay
-            // when the PaymentIntent has shipping configured (which we do in create-payment-intent)
-            // Make sure these payment methods are enabled in your Stripe Dashboard:
-            // Settings > Payment methods > Express checkouts
+            // When wallets are in PaymentOptions, keep card element focused
+            ...(cardOnlyWallets
+              ? {
+                  wallets: {
+                    applePay: 'never' as const,
+                    googlePay: 'never' as const,
+                  },
+                }
+              : {}),
           }}
         />
       </div>
@@ -285,8 +304,7 @@ export default function PaymentForm(props: PaymentFormProps) {
         borderRadius: '8px',
       },
     },
-    // Don't specify paymentMethodTypes here - let automatic_payment_methods handle it
-    // Apple Pay, Google Pay, and Link will be shown automatically if available
+    // The PaymentIntent controls available method types (card-only in checkout flow).
   })
 
   if (loading && !effectiveClientSecret) {
@@ -308,6 +326,17 @@ export default function PaymentForm(props: PaymentFormProps) {
       <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
         <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
       </div>
+    )
+  }
+
+  if (props.useParentElements && effectiveClientSecret) {
+    return (
+      <CheckoutForm
+        {...props}
+        orderDetails={props.orderDetails}
+        clientSecret={effectiveClientSecret}
+        cardOnlyWallets={props.cardOnlyWallets !== false}
+      />
     )
   }
 
@@ -343,7 +372,12 @@ export default function PaymentForm(props: PaymentFormProps) {
 
   return (
     <Elements stripe={stripePromise} options={getOptions()}>
-      <CheckoutForm {...props} orderDetails={props.orderDetails} clientSecret={effectiveClientSecret} />
+      <CheckoutForm
+        {...props}
+        orderDetails={props.orderDetails}
+        clientSecret={effectiveClientSecret}
+        cardOnlyWallets={props.cardOnlyWallets}
+      />
     </Elements>
   )
 }

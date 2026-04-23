@@ -30,6 +30,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({
         success: true,
         message: 'Payment verified successfully',
+        fulfillmentStatus: paymentIntent.metadata?.fulfillmentStatus || 'pending',
+        printfulOrderId: paymentIntent.metadata?.printfulOrderId || null,
       })
     } else {
       return NextResponse.json({

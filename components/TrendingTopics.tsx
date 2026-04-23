@@ -1,6 +1,6 @@
 'use client'
 
-import { TrendingTopic } from '@/app/page'
+import type { TrendingTopic } from '@/lib/merch'
 
 interface TrendingTopicsProps {
   topics: TrendingTopic[]

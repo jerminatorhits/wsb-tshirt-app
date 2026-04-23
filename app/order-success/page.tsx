@@ -9,6 +9,8 @@ function OrderSuccessContent() {
   const [fulfilling, setFulfilling] = useState(true)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [fulfillmentStatus, setFulfillmentStatus] = useState<'pending' | 'fulfilled' | 'unknown'>('unknown')
+  const [orderId, setOrderId] = useState<string | null>(null)
 
   useEffect(() => {
     if (paymentIntentId) {
@@ -24,10 +26,13 @@ function OrderSuccessContent() {
         .then((data) => {
           if (data.success) {
             setSuccess(true)
+            setFulfillmentStatus(data.fulfillmentStatus === 'fulfilled' ? 'fulfilled' : 'pending')
+            if (data.printfulOrderId) setOrderId(data.printfulOrderId)
           } else {
             // Payment verification failed, but payment might still be valid
             // Show success anyway since we have a payment intent ID
             setSuccess(true)
+            setFulfillmentStatus('unknown')
           }
         })
         .catch((err) => {
@@ -67,6 +72,16 @@ function OrderSuccessContent() {
             <p className="text-gray-600 dark:text-gray-400 mb-6">
               Your custom T-shirt order has been placed successfully. You&apos;ll receive a confirmation email shortly.
             </p>
+            {fulfillmentStatus !== 'unknown' && (
+              <p className="mb-2 text-sm text-gray-500 dark:text-gray-400">
+                Fulfillment status: {fulfillmentStatus === 'fulfilled' ? 'Fulfilled' : 'Processing'}
+              </p>
+            )}
+            {orderId && (
+              <p className="mb-6 text-xs text-gray-500 dark:text-gray-400">
+                Order ID: {orderId}
+              </p>
+            )}
             <a
               href="/"
               className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold"

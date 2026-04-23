@@ -1,19 +1,22 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
-import axios from 'axios'
-import { getVariantId } from '@/lib/printful-variants'
+import { fulfillFromPaymentIntent } from '@/lib/fulfillment'
+import { getRequestId, jsonWithRequestId, logEvent } from '@/lib/observability'
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
 })
 
 export async function POST(request: NextRequest) {
+  const requestId = getRequestId(request)
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')
 
   if (!signature) {
-    return NextResponse.json(
+    logEvent('warn', 'webhook.stripe.missing_signature', { requestId })
+    return jsonWithRequestId(
       { error: 'No signature' },
+      requestId,
       { status: 400 }
     )
   }
@@ -27,107 +30,72 @@ export async function POST(request: NextRequest) {
       process.env.STRIPE_WEBHOOK_SECRET || ''
     )
   } catch (err: any) {
-    console.error('Webhook signature verification failed:', err.message)
-    return NextResponse.json(
+    logEvent('error', 'webhook.stripe.invalid_signature', {
+      requestId,
+      error: err?.message || 'Webhook signature verification failed',
+    })
+    return jsonWithRequestId(
       { error: `Webhook Error: ${err.message}` },
+      requestId,
       { status: 400 }
     )
   }
 
-  // Handle the checkout.session.completed event
+  logEvent('info', 'webhook.stripe.received', {
+    requestId,
+    eventType: event.type,
+    eventId: event.id,
+  })
+
+  // Legacy checkout-session flow fulfillment
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object as Stripe.Checkout.Session
 
     // Fulfill the order
     try {
-      const { designId, imageUrl, title, size, color, quantity, shipping: shippingStr } = session.metadata || {}
-      
-      if (!imageUrl || !title || !size || !color || !quantity || !shippingStr) {
-        console.error('Missing order details in session metadata')
-        return NextResponse.json({ received: true })
+      const paymentIntentId =
+        typeof session.payment_intent === 'string'
+          ? session.payment_intent
+          : session.payment_intent?.id
+      if (!paymentIntentId) return jsonWithRequestId({ received: true }, requestId)
+      const result = await fulfillFromPaymentIntent(paymentIntentId)
+      if (!result.success) {
+        logEvent('error', 'webhook.stripe.checkout_session.fulfill_failed', {
+          requestId,
+          paymentIntentId,
+          error: result.error,
+          status: result.status,
+        })
       }
-
-      const shipping = JSON.parse(shippingStr)
-      const printfulApiKey = process.env.PRINTFUL_API_KEY
-
-      if (!printfulApiKey) {
-        console.error('Printful API key not configured')
-        return NextResponse.json({ received: true })
-      }
-
-      // Handle base64 images
-      let finalImageUrl = imageUrl
-      if (imageUrl.startsWith('data:')) {
-        try {
-          const uploadResponse = await fetch(`${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/upload-image`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ imageUrl }),
-          })
-          const uploadData = await uploadResponse.json()
-          if (uploadData.success && uploadData.imageUrl) {
-            finalImageUrl = uploadData.imageUrl
-          }
-        } catch (uploadError) {
-          console.error('Image upload failed:', uploadError)
-        }
-      }
-
-      // Get variant ID (product 71 Bella + Canvas 3001)
-      const variantId = getVariantId(color, size)
-      if (variantId === undefined) {
-        console.error(`Variant not found for ${size} ${color}`)
-        return NextResponse.json({ received: true })
-      }
-
-      // Create Printful order
-      await axios.post(
-        'https://api.printful.com/orders',
-        {
-          recipient: {
-            name: shipping.name,
-            email: shipping.email,
-            address1: shipping.address,
-            city: shipping.city,
-            state_code: shipping.state,
-            country_code: shipping.country,
-            zip: shipping.zip,
-          },
-          items: [
-            {
-              variant_id: variantId,
-              quantity: parseInt(quantity),
-              files: [
-                {
-                  type: 'front',
-                  url: finalImageUrl,
-                  position: {
-                    area_width: 1800,
-                    area_height: 2400,
-                    width: 1800,
-                    height: 1800,
-                    top: 300,
-                    left: 0,
-                  },
-                },
-              ],
-            },
-          ],
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${printfulApiKey}`,
-            'Content-Type': 'application/json',
-          },
-        }
-      )
-
-      console.log('Order fulfilled successfully via webhook')
     } catch (error: any) {
-      console.error('Error fulfilling order from webhook:', error)
+      logEvent('error', 'webhook.stripe.checkout_session.exception', {
+        requestId,
+        error: error?.message || 'Error fulfilling order from webhook',
+      })
     }
   }
 
-  return NextResponse.json({ received: true })
+  // Primary PaymentIntent flow fallback (covers client drop-offs after payment succeeds).
+  if (event.type === 'payment_intent.succeeded') {
+    const paymentIntent = event.data.object as Stripe.PaymentIntent
+    try {
+      const result = await fulfillFromPaymentIntent(paymentIntent.id)
+      if (!result.success) {
+        logEvent('error', 'webhook.stripe.payment_intent.fulfill_failed', {
+          requestId,
+          paymentIntentId: paymentIntent.id,
+          error: result.error,
+          status: result.status,
+        })
+      }
+    } catch (error) {
+      logEvent('error', 'webhook.stripe.payment_intent.exception', {
+        requestId,
+        error: (error as Error)?.message || 'Error fulfilling order from payment_intent.succeeded',
+      })
+    }
+  }
+
+  return jsonWithRequestId({ received: true }, requestId)
 }
 
