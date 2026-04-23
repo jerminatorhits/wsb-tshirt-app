@@ -216,7 +216,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
 
   return (
     <div
-      className={`flex h-full min-h-0 flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 ${className}`}
+      className={`flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 ${className}`}
     >
       <h2 className="mb-4 shrink-0 text-xl font-black uppercase tracking-wide text-zinc-100">🛒 Secure the bag</h2>
 
@@ -253,7 +253,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
         </div>
       )}
 
-      <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
         {step === 'order' && !isFulfillmentRetry && (
           <div className="space-y-5">
             <div>
@@ -460,7 +460,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
         )}
 
         {step === 'payment' && showPaymentForm && !isFulfillmentRetry && !paymentSuccess && (
-          <div className="space-y-4">
+          <div className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
             <p className="text-xs text-zinc-500">
               {size} · {selectedColor.name} · {shippingInfo.city || '…'} → <span className="text-emerald-400/90">${totalPrice}</span>
             </p>

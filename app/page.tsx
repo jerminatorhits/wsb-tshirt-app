@@ -382,13 +382,13 @@ export default function Home() {
         )}
 
         <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
-          <div className="flex h-full min-h-0 min-w-0 flex-col">
-            <div className="flex h-full min-h-0 flex-1 flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30">
+          <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
+            <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 lg:flex-1">
               <h2 className="shrink-0 text-xl font-bold uppercase tracking-wide text-zinc-200">
                 YOLO your design
               </h2>
-              <div className="mt-4 flex min-h-0 min-w-0 flex-1 flex-col gap-6">
-              <div className="min-h-0 flex-1 space-y-4">
+              <div className="mt-4 flex min-w-0 flex-col gap-6 lg:min-h-0 lg:flex-1">
+              <div className="space-y-4 lg:min-h-0 lg:flex-1">
               <div>
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   Stock Ticker
@@ -585,10 +585,10 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-col">
+          <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
             {generatedDesign && (
               <TShirtPreview
-                className="h-full min-h-0 flex-1"
+                className="lg:h-full lg:min-h-0 lg:flex-1"
                 design={generatedDesign}
                 topic={generatedDesign.topic}
                 selectedColor={selectedColor}
@@ -597,10 +597,10 @@ export default function Home() {
             )}
           </div>
 
-          <div className="flex h-full min-h-0 min-w-0 flex-col">
+          <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
             {generatedDesign && (
               <Checkout
-                className="h-full min-h-0 flex-1"
+                className="lg:h-full lg:min-h-0 lg:flex-1"
                 design={generatedDesign}
                 designTitle={generatedDesign.topic}
                 selectedColor={selectedColor}
