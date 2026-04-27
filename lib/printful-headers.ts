@@ -3,14 +3,12 @@ import axios from 'axios'
 /**
  * Printful auth headers.
  *
- * **Store-scoped API key** (created under Stores → wsbtees → API): often works
- * with `Authorization` only; we may still add `X-PF-Store-Id` after resolving.
+ * Simplest setup: set only `PRINTFUL_API_KEY` and leave `PRINTFUL_STORE_ID` unset.
+ * We then call `GET /stores` once (cached) and set `X-PF-Store-Id` from a store named
+ * like `PRINTFUL_STORE_NAME` (default `wsbtees`), or the only store on the account.
  *
- * **Account-level private token**: endpoints need `X-PF-Store-Id`.
- * - Set `PRINTFUL_STORE_ID` to your **numeric** store id (best), or
- * - Set `PRINTFUL_STORE_ID` to a **store name / slug** (e.g. `wsbtees`); we resolve
- *   the numeric id via `GET https://api.printful.com/stores`, or
- * - Leave it unset and we match `PRINTFUL_STORE_NAME` (default `wsbtees`) or the only store.
+ * Optional `PRINTFUL_STORE_ID`: all digits → use as `X-PF-Store-Id` directly; otherwise
+ * treat as a name slug and resolve via the same store list.
  */
 const STORE_LIST_PATH = 'https://api.printful.com/stores'
 
