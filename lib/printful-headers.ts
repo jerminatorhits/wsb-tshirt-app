@@ -4,8 +4,10 @@ import axios from 'axios'
  * Printful auth headers.
  *
  * Simplest setup: set only `PRINTFUL_API_KEY` and leave `PRINTFUL_STORE_ID` unset.
- * We then call `GET /stores` once (cached) and set `X-PF-Store-Id` from a store named
- * like `PRINTFUL_STORE_NAME` (default `wsbtees`), or the only store on the account.
+ * We then call `GET /stores` once (cached) and set `X-PF-Store-Id` by store name:
+ * exact match on `PRINTFUL_STORE_NAME` (default `wsbtees`), else substring match,
+ * else the only store if your account has exactly one. Multiple stores with no match
+ * → no header (set numeric `PRINTFUL_STORE_ID` or a unique `PRINTFUL_STORE_NAME`).
  *
  * Optional `PRINTFUL_STORE_ID`: all digits → use as `X-PF-Store-Id` directly; otherwise
  * treat as a name slug and resolve via the same store list.
@@ -41,12 +43,21 @@ async function resolveStoreIdFromStoresList(apiKey: string, nameHint?: string): 
     }
 
     const target = matchKey
-    const byName = stores.find((s: { id?: unknown; name?: string }) => {
-      const name = String(s?.name || '').trim().toLowerCase()
-      return name === target || name.includes(target) || target.includes(name)
+    const norm = (s: { name?: string }) => String(s?.name || '').trim().toLowerCase()
+
+    const exact = stores.find((s: { id?: unknown; name?: string }) => norm(s) === target)
+    if (exact?.id != null && String(exact.id).length > 0) {
+      const id = String(exact.id)
+      storeIdFromListCache.set(matchKey, id)
+      return id
+    }
+
+    const fuzzy = stores.find((s: { id?: unknown; name?: string }) => {
+      const name = norm(s)
+      return name.includes(target) || target.includes(name)
     })
-    if (byName?.id != null && String(byName.id).length > 0) {
-      const id = String(byName.id)
+    if (fuzzy?.id != null && String(fuzzy.id).length > 0) {
+      const id = String(fuzzy.id)
       storeIdFromListCache.set(matchKey, id)
       return id
     }
