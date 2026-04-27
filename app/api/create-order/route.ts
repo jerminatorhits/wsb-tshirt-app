@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
     console.log('Creating order with payload:', JSON.stringify(orderPayload, null, 2))
 
     const orderResponse = await axios.post(
-      'https://api.printful.com/orders?confirm=1',
+      'https://api.printful.com/orders',
       orderPayload,
       {
         headers: {

@@ -160,10 +160,9 @@ export async function fulfillFromPaymentIntent(
   }
 
   try {
-    // confirm=1: submit for fulfillment immediately (skip dashboard "draft" phase). The
-    // garment thumbnail in the orders list is cosmetic; printing uses `files[].url` below.
+    // Omit confirm=1 so Printful keeps the order as draft for manual review/approval in dashboard.
     const orderResponse = await axios.post(
-      'https://api.printful.com/orders?confirm=1',
+      'https://api.printful.com/orders',
       {
         recipient: {
           name: shipping.name,
