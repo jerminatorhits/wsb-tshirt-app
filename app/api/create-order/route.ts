@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import FormData from 'form-data'
 import { getVariantId } from '@/lib/printful-variants'
+import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 
 export async function POST(request: NextRequest) {
   try {
@@ -141,7 +142,7 @@ export async function POST(request: NextRequest) {
       orderPayload,
       {
         headers: {
-          Authorization: `Bearer ${printfulApiKey}`,
+          ...getPrintfulAuthHeaders(),
           'Content-Type': 'application/json',
         },
       }

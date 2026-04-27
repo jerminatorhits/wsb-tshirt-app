@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import axios from 'axios'
 import { getVariantId } from '@/lib/printful-variants'
+import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 import { validateShippingAddress } from '@/lib/validate-address'
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
@@ -187,7 +188,7 @@ export async function fulfillFromPaymentIntent(
       },
       {
         headers: {
-          Authorization: `Bearer ${process.env.PRINTFUL_API_KEY}`,
+          ...getPrintfulAuthHeaders(),
           'Content-Type': 'application/json',
         },
       }

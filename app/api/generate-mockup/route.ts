@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import { PRINTFUL_PRODUCT_ID, VARIANT_ID_M_BY_COLOR } from '@/lib/printful-variants'
+import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { basicAbuseCheck } from '@/lib/abuse-protection'
 
@@ -109,7 +110,7 @@ export async function POST(request: NextRequest) {
       },
       {
         headers: {
-          Authorization: `Bearer ${printfulApiKey}`,
+          ...getPrintfulAuthHeaders(),
           'Content-Type': 'application/json',
         },
       }
@@ -136,9 +137,7 @@ export async function POST(request: NextRequest) {
       const statusResponse = await axios.get(
         `https://api.printful.com/mockup-generator/task?task_key=${taskKey}`,
         {
-          headers: {
-            Authorization: `Bearer ${printfulApiKey}`,
-          },
+          headers: getPrintfulAuthHeaders(),
         }
       )
 
