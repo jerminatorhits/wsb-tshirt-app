@@ -152,6 +152,13 @@ export async function fulfillFromPaymentIntent(
     return { success: false, status: 500, error: imageResult.error }
   }
 
+  // Another fulfillment path (e.g. webhook) may have finished while we resolved the image.
+  const paymentIntentFresh = await stripe.paymentIntents.retrieve(paymentIntentId)
+  const concurrentOrderId = paymentIntentFresh.metadata?.printfulOrderId
+  if (concurrentOrderId) {
+    return { success: true, orderId: String(concurrentOrderId), alreadyFulfilled: true }
+  }
+
   try {
     const orderResponse = await axios.post(
       'https://api.printful.com/orders',

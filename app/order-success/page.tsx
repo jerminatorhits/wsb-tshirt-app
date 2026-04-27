@@ -15,8 +15,7 @@ function OrderSuccessContent() {
   useEffect(() => {
     if (paymentIntentId) {
       // Verify payment was successful
-      // Note: The order should already be fulfilled from the Checkout component
-      // This page just confirms the payment was successful
+      // Fulfillment runs from the Stripe webhook after payment; this page only verifies status.
       fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },

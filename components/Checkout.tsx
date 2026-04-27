@@ -168,6 +168,22 @@ export default function Checkout({ design, designTitle, selectedColor, className
   const handlePaymentSuccess = async (paymentIntentId: string, paymentShippingInfo?: any) => {
     setLoading(true)
     setError(null)
+
+    // First successful charge: fulfillment runs from the Stripe `payment_intent.succeeded` webhook only.
+    // Calling `/api/fulfill-order` here too races the webhook; both see empty `printfulOrderId` metadata
+    // and create duplicate Printful orders. Retry-after-failure still uses the client fulfill path.
+    const isRetryAfterFulfillmentFailure =
+      succeededPaymentIntentId != null && paymentIntentId === succeededPaymentIntentId
+
+    if (!isRetryAfterFulfillmentFailure) {
+      setPaymentSuccess(true)
+      setLoading(false)
+      setTimeout(() => {
+        window.location.href = '/order-success?payment_intent=' + paymentIntentId
+      }, 1200)
+      return
+    }
+
     try {
       const finalShippingInfo = paymentShippingInfo || shippingInfo
       const response = await fetch('/api/fulfill-order', {
