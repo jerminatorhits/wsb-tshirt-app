@@ -110,7 +110,7 @@ export async function POST(request: NextRequest) {
       },
       {
         headers: {
-          ...getPrintfulAuthHeaders(),
+          ...(await getPrintfulAuthHeaders()),
           'Content-Type': 'application/json',
         },
       }
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       const statusResponse = await axios.get(
         `https://api.printful.com/mockup-generator/task?task_key=${taskKey}`,
         {
-          headers: getPrintfulAuthHeaders(),
+          headers: await getPrintfulAuthHeaders(),
         }
       )
 

@@ -188,7 +188,7 @@ export async function fulfillFromPaymentIntent(
       },
       {
         headers: {
-          ...getPrintfulAuthHeaders(),
+          ...(await getPrintfulAuthHeaders()),
           'Content-Type': 'application/json',
         },
       }
@@ -216,6 +216,11 @@ export async function fulfillFromPaymentIntent(
     else if (data?.error?.message) errorMessage = data.error.message
     else if (data?.message) errorMessage = data.message
     else if (error?.message) errorMessage = error.message
+
+    if (/store_id/i.test(errorMessage) && !process.env.PRINTFUL_STORE_ID?.trim()) {
+      errorMessage +=
+        ' Add PRINTFUL_STORE_ID (numeric store id from Printful → wsbtees → Store settings) to Vercel, or use a store-scoped API key from that store.'
+    }
 
     return { success: false, status: error?.response?.status || 500, error: errorMessage }
   }

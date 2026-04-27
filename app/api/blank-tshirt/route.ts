@@ -67,7 +67,7 @@ export async function GET(request: NextRequest) {
     const variantId = VARIANT_ID_M_BY_COLOR[color as keyof typeof VARIANT_ID_M_BY_COLOR]
 
     const response = await axios.get(`https://api.printful.com/products/${PRINTFUL_PRODUCT_ID}`, {
-      headers: getPrintfulAuthHeaders(),
+      headers: await getPrintfulAuthHeaders(),
     })
 
     const result = response.data?.result
@@ -81,7 +81,7 @@ export async function GET(request: NextRequest) {
     if (!blankShirtUrl && targetVariant?.id) {
       try {
         const variantResponse = await axios.get(`https://api.printful.com/products/variant/${targetVariant.id}`, {
-          headers: getPrintfulAuthHeaders(),
+          headers: await getPrintfulAuthHeaders(),
         })
         const vr = variantResponse.data?.result
         blankShirtUrl = pickPreviewUrlFromVariant(vr) || pickPreviewUrlFromFiles(vr?.files || [])

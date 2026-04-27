@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       orderPayload,
       {
         headers: {
-          ...getPrintfulAuthHeaders(),
+          ...(await getPrintfulAuthHeaders()),
           'Content-Type': 'application/json',
         },
       }

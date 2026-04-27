@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
-import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 
 // Printful API integration
 // Note: This is a simplified version. In production, you'd use the Printful SDK
@@ -67,7 +66,7 @@ export async function POST(request: NextRequest) {
       },
       {
         headers: {
-          ...getPrintfulAuthHeaders(),
+          Authorization: `Bearer ${printfulApiKey}`,
         },
       }
     )
