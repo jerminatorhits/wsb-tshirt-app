@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import { fontAnton, fontBebas, fontJetbrains, fontOswald } from '@/lib/design-fonts'
 import './globals.css'
 
 export const metadata: Metadata = {
@@ -13,7 +14,10 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
+    <html
+      lang="en"
+      className={`${fontAnton.variable} ${fontBebas.variable} ${fontOswald.variable} ${fontJetbrains.variable}`}
+    >
       <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
         <div className="flex min-h-screen flex-col">
           <header className="sticky top-0 z-40 border-b border-zinc-800/70 bg-zinc-950/95">

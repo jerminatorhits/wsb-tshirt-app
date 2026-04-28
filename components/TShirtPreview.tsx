@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { GeneratedDesign, COLORS, ColorOption } from '@/lib/merch'
+import { DESIGN_LAYOUT_OPTIONS, type DesignLayoutPreset } from '@/lib/text-design'
 
 /** Same-origin URL for canvas (avoids tainted canvas when reading pixels for export). */
 function canvasShirtSrc(blankShirtUrl: string): string {
@@ -15,15 +16,35 @@ function canvasShirtSrc(blankShirtUrl: string): string {
   return `/api/proxy-shirt?url=${encodeURIComponent(blankShirtUrl)}`
 }
 
+interface PrintLayoutControls {
+  preset: DesignLayoutPreset
+  onPresetChange: (preset: DesignLayoutPreset) => void
+  scale: number
+  onScaleChange: (scale: number) => void
+  inkMode: 'auto' | 'light' | 'dark'
+  onInkModeChange: (mode: 'auto' | 'light' | 'dark') => void
+  advancedOpen: boolean
+  onAdvancedOpenChange: (open: boolean) => void
+}
+
 interface TShirtPreviewProps {
   design: GeneratedDesign
   topic: string | null
   selectedColor: ColorOption
   onColorChange: (color: ColorOption) => void
+  /** Print layout + advanced tuning (shown under shirt colors when set). */
+  printLayoutControls?: PrintLayoutControls
   className?: string
 }
 
-export default function TShirtPreview({ design, topic, selectedColor, onColorChange, className = '' }: TShirtPreviewProps) {
+export default function TShirtPreview({
+  design,
+  topic,
+  selectedColor,
+  onColorChange,
+  printLayoutControls,
+  className = '',
+}: TShirtPreviewProps) {
   const [blankShirtUrl, setBlankShirtUrl] = useState<string | null>(null)
   const [blankLoading, setBlankLoading] = useState(false)
   const [blankError, setBlankError] = useState<string | null>(null)
@@ -195,6 +216,79 @@ export default function TShirtPreview({ design, topic, selectedColor, onColorCha
           </div>
           <p className="mt-1 text-sm text-zinc-500">Selected: {selectedColor.name}</p>
         </div>
+
+        {printLayoutControls && (
+          <div className="shrink-0 space-y-3 rounded-xl border border-zinc-800/80 bg-zinc-950/40 p-4">
+            <p className="text-xs font-semibold uppercase tracking-wide text-zinc-500">Print layout</p>
+            <div className="grid gap-2 sm:grid-cols-3">
+              {DESIGN_LAYOUT_OPTIONS.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => printLayoutControls.onPresetChange(opt.id)}
+                  className={`rounded-lg border px-3 py-2.5 text-left text-sm transition ${
+                    printLayoutControls.preset === opt.id
+                      ? 'border-emerald-500/60 bg-emerald-950/40 text-emerald-100'
+                      : 'border-zinc-700 bg-zinc-900/60 text-zinc-300 hover:border-zinc-600'
+                  }`}
+                >
+                  <span className="block font-bold text-zinc-100">{opt.title}</span>
+                  <span className="mt-1 block text-[11px] leading-snug text-zinc-500">{opt.subtitle}</span>
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => printLayoutControls.onAdvancedOpenChange(!printLayoutControls.advancedOpen)}
+              className="text-xs font-medium text-zinc-500 underline decoration-zinc-600 underline-offset-2 hover:text-zinc-400"
+            >
+              {printLayoutControls.advancedOpen ? 'Hide advanced' : 'Advanced'}
+            </button>
+            {printLayoutControls.advancedOpen && (
+              <div className="space-y-4 border-t border-zinc-800 pt-3">
+                <div>
+                  <label className="mb-1.5 flex justify-between text-xs font-medium text-zinc-400">
+                    <span>Type size</span>
+                    <span className="tabular-nums text-zinc-500">
+                      {Math.round(printLayoutControls.scale * 100)}%
+                    </span>
+                  </label>
+                  <input
+                    type="range"
+                    min={0.8}
+                    max={1.2}
+                    step={0.02}
+                    value={printLayoutControls.scale}
+                    onChange={(e) => printLayoutControls.onScaleChange(parseFloat(e.target.value))}
+                    className="w-full accent-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-zinc-400">Ink on shirt</label>
+                  <div className="grid grid-cols-3 gap-1.5 rounded-lg border border-zinc-700 bg-zinc-950/80 p-1.5">
+                    {(['auto', 'dark', 'light'] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => printLayoutControls.onInkModeChange(mode)}
+                        className={`rounded-md px-2 py-1.5 text-xs font-semibold capitalize ${
+                          printLayoutControls.inkMode === mode
+                            ? 'bg-zinc-700 text-white'
+                            : 'text-zinc-500 hover:text-zinc-300'
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1.5 text-[11px] leading-relaxed text-zinc-600">
+                    Auto uses light ink on black, navy, gray, and red so the art stays readable on those fabrics.
+                  </p>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
 
         <div className="shrink-0 space-y-2">
           <h3 className="font-bold text-white">{topic || design.topic}</h3>

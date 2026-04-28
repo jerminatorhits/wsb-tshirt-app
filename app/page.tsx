@@ -4,6 +4,14 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import TShirtPreview from '@/components/TShirtPreview'
 import Checkout from '@/components/Checkout'
 import { COLORS, type ColorOption, type GeneratedDesign } from '@/lib/merch'
+import {
+  DESIGN_LAYOUT_OPTIONS,
+  ensureDesignFontsLoaded,
+  isDarkShirtColor,
+  parseDesignLayoutPreset,
+  renderDesignToDataURL,
+  type DesignLayoutPreset,
+} from '@/lib/text-design'
 
 interface TickerSearchResult {
   symbol: string
@@ -29,6 +37,12 @@ export default function Home() {
   const [tickerSuggestionLoading, setTickerSuggestionLoading] = useState(false)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
   const [tickerPrefilledFromUrl, setTickerPrefilledFromUrl] = useState(false)
+  const [designLayoutPreset, setDesignLayoutPreset] = useState<DesignLayoutPreset>('classic')
+  const [designScale, setDesignScale] = useState(1)
+  /** auto: light ink on black/navy only */
+  const [designInkMode, setDesignInkMode] = useState<'auto' | 'light' | 'dark'>('auto')
+  const [designAdvancedOpen, setDesignAdvancedOpen] = useState(false)
+  const designRefreshSeqRef = useRef(0)
 
   const cleanedTicker = ticker.trim().toUpperCase()
 
@@ -42,6 +56,9 @@ export default function Home() {
     const qExp = params.get('exp')
     const qStrike = params.get('strike')
     const qColor = params.get('color')
+    const qLayout = parseDesignLayoutPreset(params.get('layout'))
+    const qScale = params.get('scale')
+    const qInk = params.get('ink')
 
     if (qTicker) {
       setTicker(qTicker.toUpperCase().slice(0, 6))
@@ -56,6 +73,12 @@ export default function Home() {
       const matched = COLORS.find((c) => c.value === qColor)
       if (matched) setSelectedColor(matched)
     }
+    if (qLayout) setDesignLayoutPreset(qLayout)
+    if (qScale) {
+      const n = parseFloat(qScale)
+      if (Number.isFinite(n) && n >= 0.8 && n <= 1.2) setDesignScale(n)
+    }
+    if (qInk === 'light' || qInk === 'dark' || qInk === 'auto') setDesignInkMode(qInk)
   }, [])
 
   const activeStrikes = useMemo(
@@ -216,99 +239,144 @@ export default function Home() {
     }
   }, [ticker, tickerPrefilledFromUrl])
 
-  const createDesignImage = (tickerText: string, primaryText: string, optionsText: string) => {
-    const canvas = document.createElement('canvas')
-    canvas.width = 1800
-    canvas.height = 1800
-    const ctx = canvas.getContext('2d')
-    if (!ctx) {
-      throw new Error('Could not render design image')
-    }
-
-    // Keep the design background transparent so it overlays cleanly on mockups.
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
-
-    ctx.textAlign = 'center'
-    ctx.fillStyle = '#111827'
-
-    const fitFontSize = (text: string, startSize: number, minSize: number, maxWidth: number, weight = 900) => {
-      let size = startSize
-      while (size > minSize) {
-        ctx.font = `${weight} ${size}px system-ui, -apple-system, sans-serif`
-        if (ctx.measureText(text).width <= maxWidth) break
-        size -= 8
+  type ParsedDesignForm =
+    | { ok: false; error: string }
+    | {
+        ok: true
+        tickerText: string
+        primaryText: string
+        optionsText: string
+        titleParts: string[]
       }
-      return size
-    }
 
-    const tickerLine = `$${tickerText}`
-    const tickerSize = fitFontSize(tickerLine, 280, 140, 1450, 900)
-    ctx.font = `900 ${tickerSize}px system-ui, -apple-system, sans-serif`
-    ctx.fillText(`$${tickerText}`, 900, 650)
-
-    const primarySize = fitFontSize(primaryText, 420, 160, 1450, 900)
-    ctx.font = `900 ${primarySize}px system-ui, -apple-system, sans-serif`
-    ctx.fillText(primaryText, 900, 1100)
-
-    if (optionsText) {
-      const optionsSize = fitFontSize(optionsText, 120, 70, 1400, 700)
-      ctx.font = `700 ${optionsSize}px system-ui, -apple-system, sans-serif`
-      ctx.fillStyle = '#374151'
-      ctx.fillText(optionsText, 900, 1380)
-    }
-
-    return canvas.toDataURL('image/png')
-  }
-
-  const handleBuildDesign = () => {
+  const parseDesignForm = (): ParsedDesignForm => {
     const cleanedNumber = numberValue.trim()
 
     if (!cleanedTicker) {
-      setErrorMessage('Ticker is required')
-      return
+      return { ok: false, error: 'Ticker is required' }
     }
-
     if (!/^[A-Z]{1,6}$/.test(cleanedTicker)) {
-      setErrorMessage('Ticker must be 1-6 letters')
-      return
+      return { ok: false, error: 'Ticker must be 1-6 letters' }
     }
-
-    let primaryText = ''
-    let cleanedOptions = ''
 
     if (expressionMode === 'price') {
       if (!cleanedNumber) {
-        setErrorMessage('Price is required')
-        return
+        return { ok: false, error: 'Price is required' }
       }
       if (!/^\d+(\.\d+)?$/.test(cleanedNumber)) {
-        setErrorMessage('Price must be a non-negative number')
-        return
+        return { ok: false, error: 'Price must be a non-negative number' }
       }
-      primaryText = cleanedNumber
-    } else {
-      if (!selectedExpiration || !selectedStrike) {
-        setErrorMessage('Select expiration and strike for the options position')
-        return
+      return {
+        ok: true,
+        tickerText: cleanedTicker,
+        primaryText: cleanedNumber,
+        optionsText: '',
+        titleParts: [`$${cleanedTicker}`, cleanedNumber],
       }
-      const suffix = optionType === 'CALL' ? 'C' : 'P'
-      cleanedOptions = `${formatOptionDateShort(Number(selectedExpiration))} ${selectedStrike}${suffix}`
-      primaryText = cleanedOptions
+    }
+
+    if (!selectedExpiration || !selectedStrike) {
+      return { ok: false, error: 'Select expiration and strike for the options position' }
+    }
+    const suffix = optionType === 'CALL' ? 'C' : 'P'
+    const line = `${formatOptionDateShort(Number(selectedExpiration))} ${selectedStrike}${suffix}`
+    return {
+      ok: true,
+      tickerText: cleanedTicker,
+      primaryText: line,
+      optionsText: '',
+      titleParts: [`$${cleanedTicker}`, line],
+    }
+  }
+
+  const effectiveLightInk =
+    designInkMode === 'light' ? true : designInkMode === 'dark' ? false : isDarkShirtColor(selectedColor.value)
+
+  const buildPromptFromParsed = (parsed: Extract<ParsedDesignForm, { ok: true }>) => {
+    const layoutLabel = DESIGN_LAYOUT_OPTIONS.find((o) => o.id === designLayoutPreset)?.title ?? designLayoutPreset
+    if (expressionMode === 'price') {
+      return `Ticker: ${parsed.tickerText} | Price: ${parsed.primaryText}${parsed.optionsText ? ` | Options: ${parsed.optionsText}` : ''} | Layout: ${layoutLabel} | Scale: ${designScale} | Ink: ${designInkMode}`
+    }
+    return `Ticker: ${parsed.tickerText} | Options: ${parsed.primaryText} | Layout: ${layoutLabel} | Scale: ${designScale} | Ink: ${designInkMode}`
+  }
+
+  /* eslint-disable react-hooks/exhaustive-deps -- refresh only when print options or form content change; omit full `generatedDesign` to avoid looping on `imageUrl` updates */
+  useEffect(() => {
+    if (!generatedDesign) return
+    const parsed = parseDesignForm()
+    if (!parsed.ok) return
+
+    const seq = ++designRefreshSeqRef.current
+    void (async () => {
+      try {
+        await ensureDesignFontsLoaded()
+        const imageUrl = renderDesignToDataURL({
+          tickerText: parsed.tickerText,
+          primaryText: parsed.primaryText,
+          optionsText: parsed.optionsText,
+          preset: designLayoutPreset,
+          scale: designScale,
+          useLightInk: effectiveLightInk,
+          expressionMode,
+        })
+        if (seq !== designRefreshSeqRef.current) return
+        const prompt = buildPromptFromParsed(parsed)
+        setGeneratedDesign((prev) => {
+          if (!prev) return prev
+          return {
+            ...prev,
+            imageUrl,
+            topic: parsed.titleParts.join(' '),
+            prompt,
+          }
+        })
+      } catch (e) {
+        if (seq === designRefreshSeqRef.current) {
+          console.error('Failed to refresh design preview:', e)
+        }
+      }
+    })()
+  }, [
+    generatedDesign?.id,
+    designLayoutPreset,
+    designScale,
+    designInkMode,
+    selectedColor.value,
+    effectiveLightInk,
+    cleanedTicker,
+    expressionMode,
+    numberValue,
+    selectedExpiration,
+    selectedStrike,
+    optionType,
+  ])
+  /* eslint-enable react-hooks/exhaustive-deps */
+
+  const handleBuildDesign = async () => {
+    const parsed = parseDesignForm()
+    if (!parsed.ok) {
+      setErrorMessage(parsed.error)
+      return
     }
 
     try {
-      const imageUrl = createDesignImage(cleanedTicker, primaryText, expressionMode === 'price' ? cleanedOptions : '')
-      const titleParts = [`$${cleanedTicker}`, primaryText]
-      if (expressionMode === 'price' && cleanedOptions) titleParts.push(cleanedOptions)
+      await ensureDesignFontsLoaded()
+      const imageUrl = renderDesignToDataURL({
+        tickerText: parsed.tickerText,
+        primaryText: parsed.primaryText,
+        optionsText: parsed.optionsText,
+        preset: designLayoutPreset,
+        scale: designScale,
+        useLightInk: effectiveLightInk,
+        expressionMode,
+      })
+      const prompt = buildPromptFromParsed(parsed)
 
       setGeneratedDesign({
         id: `text-design-${Date.now()}`,
-        topic: titleParts.join(' '),
+        topic: parsed.titleParts.join(' '),
         imageUrl,
-        prompt:
-          expressionMode === 'price'
-            ? `Ticker: ${cleanedTicker} | Price: ${primaryText}${cleanedOptions ? ` | Options: ${cleanedOptions}` : ''}`
-            : `Ticker: ${cleanedTicker} | Options: ${primaryText}`,
+        prompt,
         createdAt: new Date().toISOString(),
       })
       setErrorMessage(null)
@@ -332,6 +400,9 @@ export default function Home() {
       if (selectedStrike) params.set('strike', selectedStrike)
     }
     if (selectedColor.value) params.set('color', selectedColor.value)
+    params.set('layout', designLayoutPreset)
+    params.set('scale', String(designScale))
+    params.set('ink', designInkMode)
 
     const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`
 
@@ -568,7 +639,7 @@ export default function Home() {
 
               <button
                 type="button"
-                onClick={handleBuildDesign}
+                onClick={() => void handleBuildDesign()}
                 className="w-full shrink-0 rounded-xl bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 text-lg font-black uppercase tracking-wide text-zinc-950 shadow-lg shadow-emerald-900/25 transition hover:shadow-emerald-500/20 active:scale-[0.99]"
               >
                 🚀 Print the play
@@ -593,6 +664,16 @@ export default function Home() {
                 topic={generatedDesign.topic}
                 selectedColor={selectedColor}
                 onColorChange={setSelectedColor}
+                printLayoutControls={{
+                  preset: designLayoutPreset,
+                  onPresetChange: setDesignLayoutPreset,
+                  scale: designScale,
+                  onScaleChange: setDesignScale,
+                  inkMode: designInkMode,
+                  onInkModeChange: setDesignInkMode,
+                  advancedOpen: designAdvancedOpen,
+                  onAdvancedOpenChange: setDesignAdvancedOpen,
+                }}
               />
             )}
           </div>
