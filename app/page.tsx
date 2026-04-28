@@ -278,8 +278,10 @@ export default function Home() {
     if (!selectedExpiration || !selectedStrike) {
       return { ok: false, error: 'Select expiration and strike for the options position' }
     }
-    const suffix = optionType === 'CALL' ? 'C' : 'P'
-    const line = `${formatOptionDateShort(Number(selectedExpiration))} ${selectedStrike}${suffix}`
+    const strikeDisplay = selectedStrike.replace(/^\$/, '').trim()
+    const expShort = formatOptionDateShort(Number(selectedExpiration))
+    // Spell out CALL/PUT for print legibility (single-letter suffix is easy to miss in Printful thumbnails).
+    const line = `${expShort}  $${strikeDisplay} ${optionType}`
     return {
       ok: true,
       tickerText: cleanedTicker,

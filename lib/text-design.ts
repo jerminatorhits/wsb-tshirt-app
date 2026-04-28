@@ -122,7 +122,11 @@ function computeAntonPairSizes(
     78 * sc,
     Math.min(tickerStart, tickerStart - Math.max(0, len - 8) * 8.5 * sc)
   )
-  const primaryMin = Math.max(52 * sc, tickerMin * 0.78)
+  // Option lines include date + strike + CALL/PUT — keep a readable floor for POD previews and shirts.
+  const primaryMin =
+    expressionMode === 'option'
+      ? Math.max(96 * sc, tickerMin * 0.88)
+      : Math.max(52 * sc, tickerMin * 0.78)
   let primarySize = fitFontSizeTracked(
     ctx,
     primaryText,
@@ -170,7 +174,10 @@ function computeMonoPairSizes(
     78 * sc,
     Math.min(292 * sc, 292 * sc - Math.max(0, len - 9) * 7.2 * sc)
   )
-  const primaryMin = Math.max(56 * sc, monoMin * 0.78)
+  const primaryMin =
+    expressionMode === 'option'
+      ? Math.max(84 * sc, monoMin * 0.88)
+      : Math.max(56 * sc, monoMin * 0.78)
   let primarySize = fitFontSize(ctx, primaryText, primaryStart, primaryMin, maxW, 700, FONT_MONO)
   primarySize = Math.min(primarySize, tickerSize)
   return { tickerSize, primarySize }

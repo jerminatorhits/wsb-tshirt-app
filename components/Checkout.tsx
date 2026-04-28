@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { GeneratedDesign, ColorOption } from '@/lib/merch'
 import { validateShippingAddress } from '@/lib/validate-address'
 import PaymentOptions from './PaymentOptions'
@@ -78,6 +78,32 @@ export default function Checkout({ design, designTitle, selectedColor, className
       setStep('payment')
     }
   }, [showPaymentForm, isFulfillmentRetry])
+
+  /**
+   * PaymentIntent metadata stores `imageUrl` at creation time. If the on-page design refreshes
+   * (fonts loaded, option fields updated) after the PI was created, checkout could charge for
+   * art that no longer matches the preview. Drop the client secret and send the user back to
+   * shipping so "Complete order" re-creates the PI with the latest image.
+   */
+  const lockedDesignKeyRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (!paymentIntentClientSecret || !showPaymentForm) {
+      lockedDesignKeyRef.current = null
+      return
+    }
+    const key = `${design.id}|${design.topic}|${design.imageUrl}`
+    if (lockedDesignKeyRef.current === null) {
+      lockedDesignKeyRef.current = key
+      return
+    }
+    if (lockedDesignKeyRef.current !== key) {
+      lockedDesignKeyRef.current = null
+      setPaymentIntentClientSecret(null)
+      setShowPaymentForm(false)
+      setStep('shipping')
+      setError('Design was updated. Continue from shipping to refresh payment with the latest print file.')
+    }
+  }, [design.id, design.topic, design.imageUrl, paymentIntentClientSecret, showPaymentForm])
 
   useEffect(() => {
     const initializeCheckout = async () => {
@@ -457,18 +483,18 @@ export default function Checkout({ design, designTitle, selectedColor, className
             ) : (
               <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
                 <button
-                  type="button"
-                  onClick={goBackToOrder}
-                  className="w-full rounded-lg border border-zinc-600 py-3 font-semibold text-zinc-200 transition hover:bg-zinc-800 sm:w-auto sm:px-6"
-                >
-                  Back
-                </button>
-                <button
                   type="submit"
                   disabled={loading}
-                  className="w-full flex-1 rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 py-3.5 font-black uppercase tracking-wide text-zinc-950 shadow-lg disabled:cursor-not-allowed disabled:opacity-50"
+                  className="order-1 w-full flex-1 rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 py-3.5 font-black uppercase tracking-wide text-zinc-950 shadow-lg disabled:cursor-not-allowed disabled:opacity-50 sm:order-2"
                 >
                   {loading ? '…' : 'Continue to payment'}
+                </button>
+                <button
+                  type="button"
+                  onClick={goBackToOrder}
+                  className="order-2 w-full rounded-lg border border-zinc-600 py-3 font-semibold text-zinc-200 transition hover:bg-zinc-800 sm:order-1 sm:w-auto sm:px-6"
+                >
+                  Back
                 </button>
               </div>
             )}
