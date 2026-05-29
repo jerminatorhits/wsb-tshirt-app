@@ -9,6 +9,9 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
 })
 
+const BASE_SHIRT_PRICE = 24.99
+const SHIPPING_FLAT_RATE = 4.99
+
 async function normalizeImageUrlForMetadata(imageUrl: string): Promise<string> {
   if (!imageUrl || !imageUrl.startsWith('data:')) return imageUrl || ''
 
@@ -54,15 +57,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { amount, shipping, orderDetails } = await request.json()
-
-    if (!amount) {
-      return jsonWithRequestId(
-        { error: 'Missing required fields' },
-        requestId,
-        { status: 400 }
-      )
-    }
+    const { shipping, orderDetails } = await request.json()
 
     // Shipping may be empty when wallets collect it later; if any field is set, require a full valid address
     const shippingData = shipping || {}
@@ -90,12 +85,47 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const quantity = Math.max(1, Math.floor(Number(orderDetails?.quantity || 1)))
+    const subtotalCents = Math.round(BASE_SHIRT_PRICE * 100) * quantity
+    const shippingCents = Math.round(SHIPPING_FLAT_RATE * 100)
+
+    let taxCents = 0
+    if (shippingData.address) {
+      // Stripe Tax estimate for the physical shirt line item (exclusive tax).
+      // Jurisdictions differ, so this is address-driven and may vary by destination.
+      const taxCalc = await stripe.tax.calculations.create({
+        currency: 'usd',
+        line_items: [
+          {
+            amount: subtotalCents,
+            reference: orderDetails?.designId || 'shirt',
+          },
+          {
+            amount: shippingCents,
+            reference: 'shipping_flat_rate',
+          },
+        ],
+        customer_details: {
+          address: {
+            line1: shippingData.address || '',
+            city: shippingData.city || '',
+            state: shippingData.state || '',
+            postal_code: shippingData.zip || '',
+            country: shippingData.country || 'US',
+          },
+          address_source: 'shipping',
+        },
+      })
+      taxCents = Number(taxCalc.tax_amount_exclusive || 0)
+    }
+
+    const totalCents = subtotalCents + shippingCents + taxCents
     const metadataImageUrl = await normalizeImageUrlForMetadata(orderDetails?.imageUrl || '')
 
     // Create a card-only PaymentIntent for the card form.
     // Apple Pay / Google Pay are still supported through Payment Request (wallet tokens map to card).
     const paymentIntent = await stripe.paymentIntents.create({
-      amount: amount, // Already in cents
+      amount: totalCents,
       currency: 'usd',
       payment_method_types: ['card'],
       // Request shipping address from Apple Pay/Google Pay
@@ -130,11 +160,18 @@ export async function POST(request: NextRequest) {
     logEvent('info', 'payment_intent.create.succeeded', {
       requestId,
       paymentIntentId: paymentIntent.id,
-      amount,
+      amount: totalCents,
+      taxCents,
     })
     return jsonWithRequestId(
       {
         clientSecret: paymentIntent.client_secret,
+        amounts: {
+          subtotalCents,
+          shippingCents,
+          taxCents,
+          totalCents,
+        },
       },
       requestId
     )

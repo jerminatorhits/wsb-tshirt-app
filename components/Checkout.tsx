@@ -37,6 +37,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
   const [showPaymentForm, setShowPaymentForm] = useState(false)
   const [paymentSuccess, setPaymentSuccess] = useState(false)
   const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null)
+  const [chargedTotal, setChargedTotal] = useState<number | null>(null)
   const [succeededPaymentIntentId, setSucceededPaymentIntentId] = useState<string | null>(null)
   const [step, setStep] = useState<WizardStep>('order')
 
@@ -57,12 +58,11 @@ export default function Checkout({ design, designTitle, selectedColor, className
     [shippingInfo]
   )
 
-  const baseCost = 12.0
-  const markup = 1.5
-  const basePrice = baseCost * markup
+  const basePrice = 24.99
   const shippingCost = 4.99
+  const [estimatedTax, setEstimatedTax] = useState(0)
   const subtotal = basePrice * quantity
-  const totalPrice = (subtotal + shippingCost).toFixed(2)
+  const totalPrice = (subtotal + shippingCost + estimatedTax).toFixed(2)
 
   const stepIndex = STEPS.findIndex((s) => s.id === step)
   const isFulfillmentRetry = Boolean(succeededPaymentIntentId)
@@ -99,11 +99,18 @@ export default function Checkout({ design, designTitle, selectedColor, className
     if (lockedDesignKeyRef.current !== key) {
       lockedDesignKeyRef.current = null
       setPaymentIntentClientSecret(null)
+      setChargedTotal(null)
+      setEstimatedTax(0)
       setShowPaymentForm(false)
       setStep('shipping')
       setError('Design was updated. Continue from shipping to refresh payment with the latest print file.')
     }
   }, [design.id, design.topic, design.imageUrl, paymentIntentClientSecret, showPaymentForm])
+
+  useEffect(() => {
+    setEstimatedTax(0)
+    setChargedTotal(null)
+  }, [quantity, size, selectedColor.value])
 
   useEffect(() => {
     const initializeCheckout = async () => {
@@ -148,6 +155,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
     setShippingSubmitAttempted(false)
     setShowPaymentForm(false)
     setPaymentIntentClientSecret(null)
+    setChargedTotal(null)
     setStep('shipping')
   }
 
@@ -165,7 +173,6 @@ export default function Checkout({ design, designTitle, selectedColor, className
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          amount: Math.round(parseFloat(totalPrice) * 100),
           shipping: shippingInfo,
           orderDetails: {
             designId: design.id,
@@ -179,6 +186,12 @@ export default function Checkout({ design, designTitle, selectedColor, className
       })
       const data = await response.json()
       if (data.clientSecret) {
+        if (data.amounts) {
+          const taxFromServer = Number(data.amounts.taxCents || 0) / 100
+          const totalFromServer = Number(data.amounts.totalCents || 0) / 100
+          setEstimatedTax(taxFromServer)
+          setChargedTotal(totalFromServer)
+        }
         setPaymentIntentClientSecret(data.clientSecret)
         setStep('payment')
       } else {
@@ -344,14 +357,19 @@ export default function Checkout({ design, designTitle, selectedColor, className
                 <span className="text-zinc-500">Subtotal</span>
                 <span>${subtotal.toFixed(2)}</span>
               </div>
-              <div className="mb-2 flex justify-between">
+              <div className="mb-1 flex justify-between">
                 <span className="text-zinc-500">Shipping</span>
                 <span>${shippingCost.toFixed(2)}</span>
+              </div>
+              <div className="mb-2 flex justify-between">
+                <span className="text-zinc-500">Estimated tax</span>
+                <span>${estimatedTax.toFixed(2)}</span>
               </div>
               <div className="flex justify-between border-t border-zinc-700 pt-2 text-lg font-bold text-emerald-400">
                 <span className="text-white">Total</span>
                 <span>${totalPrice}</span>
               </div>
+              <p className="mt-2 text-[11px] text-zinc-500">Tax may vary slightly based on destination.</p>
             </div>
               <button
               type="button"
@@ -383,9 +401,29 @@ export default function Checkout({ design, designTitle, selectedColor, className
                 </p>
               </div>
             )}
-            <p className="text-xs text-zinc-500">
-              {size} · {selectedColor.name} · Qty {quantity} · <span className="text-emerald-400/90">${totalPrice}</span>
-            </p>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-xs text-zinc-300">
+              <p className="mb-2 text-zinc-500">
+                {size} · {selectedColor.name} · Qty {quantity}
+              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Items</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Shipping</span>
+                  <span>${shippingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Estimated tax</span>
+                  <span>${estimatedTax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between border-t border-zinc-700 pt-1.5 font-semibold text-emerald-400">
+                  <span className="text-zinc-200">Total</span>
+                  <span>${totalPrice}</span>
+                </div>
+              </div>
+            </div>
             <h3 className="text-sm font-semibold uppercase tracking-wide text-white">Shipping</h3>
             <div className="grid grid-cols-2 gap-2 sm:gap-3">
               <input
@@ -503,9 +541,29 @@ export default function Checkout({ design, designTitle, selectedColor, className
 
         {step === 'payment' && showPaymentForm && !isFulfillmentRetry && !paymentSuccess && (
           <div className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
-            <p className="text-xs text-zinc-500">
-              {size} · {selectedColor.name} · {shippingInfo.city || '…'} → <span className="text-emerald-400/90">${totalPrice}</span>
-            </p>
+            <div className="rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-xs text-zinc-300">
+              <p className="mb-2 text-zinc-500">
+                {size} · {selectedColor.name} · {shippingInfo.city || '…'}
+              </p>
+              <div className="space-y-1">
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Items</span>
+                  <span>${subtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Shipping</span>
+                  <span>${shippingCost.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-zinc-500">Estimated tax</span>
+                  <span>${estimatedTax.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between border-t border-zinc-700 pt-1.5 font-semibold text-emerald-400">
+                  <span className="text-zinc-200">Total</span>
+                  <span>${totalPrice}</span>
+                </div>
+              </div>
+            </div>
             {error && (
               <div className="rounded-lg border border-rose-500/50 bg-rose-950/40 p-3">
                 <p className="text-sm text-rose-200">{error}</p>
@@ -532,7 +590,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
                   >
                     <PaymentOptions
                       clientSecret={paymentIntentClientSecret}
-                      amount={parseFloat(totalPrice)}
+                      amount={chargedTotal ?? parseFloat(totalPrice)}
                       onSuccess={handlePaymentSuccess}
                       onError={handlePaymentError}
                       orderDetails={{

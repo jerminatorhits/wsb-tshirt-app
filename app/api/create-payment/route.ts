@@ -8,8 +8,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 })
 
 // Pricing configuration
-const BASE_COST = 12.00 // Your cost from Printful (approximate)
-const MARKUP_PERCENTAGE = 1.5 // 50% markup = 1.5x
+const BASE_SHIRT_PRICE = 24.99
 const SHIPPING_COST = 4.99
 
 async function normalizeImageUrlForMetadata(imageUrl: string): Promise<string> {
@@ -72,8 +71,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Calculate pricing with margin
-    const itemCost = BASE_COST * MARKUP_PERCENTAGE // Your selling price per item
+    // Calculate pricing
+    const itemCost = BASE_SHIRT_PRICE
     const subtotal = itemCost * quantity
     const shippingTotal = SHIPPING_COST
     const total = subtotal + shippingTotal
