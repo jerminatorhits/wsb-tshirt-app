@@ -41,6 +41,7 @@ interface PaymentFormProps {
     size: string
     color: string
     quantity: number
+    productType?: 'shirt' | 'mug'
   }
   /** When provided, use this PaymentIntent (no creation); used by Checkout for one-PI-per-checkout flow */
   clientSecret?: string

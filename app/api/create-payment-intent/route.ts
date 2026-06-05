@@ -9,8 +9,7 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
 })
 
-const BASE_SHIRT_PRICE = 24.99
-const SHIPPING_FLAT_RATE = 4.99
+import { getProductPricing, parseProductType } from '@/lib/products'
 
 async function normalizeImageUrlForMetadata(imageUrl: string): Promise<string> {
   if (!imageUrl || !imageUrl.startsWith('data:')) return imageUrl || ''
@@ -85,9 +84,11 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    const productType = parseProductType(orderDetails?.productType)
+    const { basePrice, shippingFlatRate } = getProductPricing(productType)
     const quantity = Math.max(1, Math.floor(Number(orderDetails?.quantity || 1)))
-    const subtotalCents = Math.round(BASE_SHIRT_PRICE * 100) * quantity
-    const shippingCents = Math.round(SHIPPING_FLAT_RATE * 100)
+    const subtotalCents = Math.round(basePrice * 100) * quantity
+    const shippingCents = Math.round(shippingFlatRate * 100)
 
     let taxCents = 0
     if (shippingData.address) {
@@ -98,7 +99,7 @@ export async function POST(request: NextRequest) {
         line_items: [
           {
             amount: subtotalCents,
-            reference: orderDetails?.designId || 'shirt',
+            reference: orderDetails?.designId || productType,
           },
           {
             amount: shippingCents,
@@ -148,6 +149,7 @@ export async function POST(request: NextRequest) {
       metadata: {
         shipping: JSON.stringify(shippingData),
         designId: orderDetails?.designId || '',
+        productType,
         imageUrl: metadataImageUrl,
         title: orderDetails?.title || '',
         size: orderDetails?.size || '',

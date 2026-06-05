@@ -1,6 +1,7 @@
 import Stripe from 'stripe'
 import axios from 'axios'
-import { getVariantId } from '@/lib/printful-variants'
+import { parseProductType, type ProductType } from '@/lib/products'
+import { buildPrintfulOrderFiles, getPrintfulVariantId } from '@/lib/printful-print-files'
 import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 import { validateShippingAddress } from '@/lib/validate-address'
 
@@ -25,6 +26,7 @@ type OrderInfo = {
   size: string
   color: string
   quantity: number
+  productType: ProductType
 }
 
 type FulfillResult =
@@ -53,6 +55,7 @@ function getOrderInfoFromPaymentIntent(paymentIntent: Stripe.PaymentIntent): Ord
     size: md.size,
     color: md.color,
     quantity: Math.max(1, Math.floor(quantity)),
+    productType: parseProductType(md.productType),
   }
 }
 
@@ -138,12 +141,12 @@ export async function fulfillFromPaymentIntent(
     return { success: false, status: 400, error: validation.error || 'Invalid shipping address' }
   }
 
-  const variantId = getVariantId(orderInfo.color, orderInfo.size)
+  const variantId = getPrintfulVariantId(orderInfo.productType, orderInfo.color, orderInfo.size)
   if (variantId === undefined) {
     return {
       success: false,
       status: 400,
-      error: `Variant not found for size ${orderInfo.size} and color ${orderInfo.color}`,
+      error: `Variant not found for ${orderInfo.productType} (${orderInfo.size}${orderInfo.productType === 'shirt' ? ` / ${orderInfo.color}` : ''})`,
     }
   }
 
@@ -177,20 +180,7 @@ export async function fulfillFromPaymentIntent(
           {
             variant_id: variantId,
             quantity: orderInfo.quantity,
-            files: [
-              {
-                type: 'front',
-                url: imageResult.imageUrl,
-                position: {
-                  area_width: 1800,
-                  area_height: 2400,
-                  width: 1800,
-                  height: 1800,
-                  top: 300,
-                  left: 0,
-                },
-              },
-            ],
+            files: buildPrintfulOrderFiles(orderInfo.productType, imageResult.imageUrl, orderInfo.size),
           },
         ],
       },

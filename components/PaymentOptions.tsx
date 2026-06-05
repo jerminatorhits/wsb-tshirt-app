@@ -16,6 +16,7 @@ interface PaymentOptionsProps {
     size: string
     color: string
     quantity: number
+    productType?: 'shirt' | 'mug'
   }
   shippingInfo: {
     name: string

@@ -12,6 +12,7 @@ import {
   renderDesignToDataURL,
   type DesignLayoutPreset,
 } from '@/lib/text-design'
+import { MUG_SIZES, parseProductType, type ProductType } from '@/lib/products'
 
 interface TickerSearchResult {
   symbol: string
@@ -42,6 +43,8 @@ export default function Home() {
   /** auto: light ink on black/navy only */
   const [designInkMode, setDesignInkMode] = useState<'auto' | 'light' | 'dark'>('auto')
   const [designAdvancedOpen, setDesignAdvancedOpen] = useState(false)
+  const [productType, setProductType] = useState<ProductType>('shirt')
+  const [orderSize, setOrderSize] = useState('M')
   const designRefreshSeqRef = useRef(0)
 
   const cleanedTicker = ticker.trim().toUpperCase()
@@ -59,6 +62,7 @@ export default function Home() {
     const qLayout = parseDesignLayoutPreset(params.get('layout'))
     const qScale = params.get('scale')
     const qInk = params.get('ink')
+    const qProduct = parseProductType(params.get('product'))
 
     if (qTicker) {
       setTicker(qTicker.toUpperCase().slice(0, 6))
@@ -79,6 +83,8 @@ export default function Home() {
       if (Number.isFinite(n) && n >= 0.8 && n <= 1.2) setDesignScale(n)
     }
     if (qInk === 'light' || qInk === 'dark' || qInk === 'auto') setDesignInkMode(qInk)
+    setProductType(qProduct)
+    setOrderSize(qProduct === 'mug' ? '11 oz' : 'M')
   }, [])
 
   const activeStrikes = useMemo(
@@ -292,7 +298,18 @@ export default function Home() {
   }
 
   const effectiveLightInk =
-    designInkMode === 'light' ? true : designInkMode === 'dark' ? false : isDarkShirtColor(selectedColor.value)
+    productType === 'mug'
+      ? false
+      : designInkMode === 'light'
+        ? true
+        : designInkMode === 'dark'
+          ? false
+          : isDarkShirtColor(selectedColor.value)
+
+  const handleProductTypeChange = (next: ProductType) => {
+    setProductType(next)
+    setOrderSize(next === 'mug' ? MUG_SIZES[0] : 'M')
+  }
 
   const buildPromptFromParsed = (parsed: Extract<ParsedDesignForm, { ok: true }>) => {
     const layoutLabel = DESIGN_LAYOUT_OPTIONS.find((o) => o.id === designLayoutPreset)?.title ?? designLayoutPreset
@@ -351,6 +368,7 @@ export default function Home() {
     selectedExpiration,
     selectedStrike,
     optionType,
+    productType,
   ])
   /* eslint-enable react-hooks/exhaustive-deps */
 
@@ -374,8 +392,9 @@ export default function Home() {
       })
       const prompt = buildPromptFromParsed(parsed)
 
+      const designId = `text-design-${Date.now()}`
       setGeneratedDesign({
-        id: `text-design-${Date.now()}`,
+        id: designId,
         topic: parsed.titleParts.join(' '),
         imageUrl,
         prompt,
@@ -405,6 +424,7 @@ export default function Home() {
     params.set('layout', designLayoutPreset)
     params.set('scale', String(designScale))
     params.set('ink', designInkMode)
+    if (productType === 'mug') params.set('product', 'mug')
 
     const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`
 
@@ -422,24 +442,87 @@ export default function Home() {
     <main className="relative overflow-hidden bg-zinc-950 text-zinc-100">
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(34,197,94,0.12),transparent)]" />
       <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(244,63,94,0.07),transparent)]" />
-      <div className="container relative mx-auto px-4 py-8 md:py-10">
-        <div className="text-center mb-10">
+      <div className="container relative z-10 mx-auto px-4 py-8 md:py-10">
+        <div className="relative z-10 mb-10 text-center">
           <h1 className="text-4xl font-black tracking-tight sm:text-5xl md:text-6xl">
             <span className="bg-gradient-to-r from-emerald-400 via-lime-400 to-rose-400 bg-clip-text text-transparent">
               WSB Shirt Lab
             </span>
           </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-zinc-400">
-            Unlike most of your plays,{' '}
-            <span className="font-semibold text-emerald-400">these actually print</span>.
+          <p className="mx-auto mt-4 max-w-2xl text-lg text-zinc-300">
+            Turn your ticker, price, or options play into a premium printed tee or mug.
           </p>
-          <div className="mx-auto mt-4 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 sm:gap-3">
-            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1">
-              Secure payment by Stripe
+          <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-500">
+            Unlike most of your plays,{' '}
+            <span className="text-emerald-400/90">these actually ship</span>.
+          </p>
+          <ol className="mx-auto mt-8 flex max-w-2xl flex-col gap-3 text-left sm:flex-row sm:gap-4 sm:text-center">
+            {[
+              { n: '1', label: 'Enter your play', detail: 'Ticker, price, or option' },
+              { n: '2', label: 'Preview your design', detail: 'See it on the product' },
+              { n: '3', label: 'Checkout securely', detail: 'Stripe · printed to order' },
+            ].map((item) => (
+              <li
+                key={item.n}
+                className="flex flex-1 items-start gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/50 px-4 py-3 sm:flex-col sm:items-center sm:gap-2"
+              >
+                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-sm font-bold text-emerald-400">
+                  {item.n}
+                </span>
+                <div>
+                  <p className="text-sm font-semibold text-zinc-200">{item.label}</p>
+                  <p className="text-xs text-zinc-500">{item.detail}</p>
+                </div>
+              </li>
+            ))}
+          </ol>
+          <div className="mx-auto mt-6 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 sm:gap-3">
+            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+              Ships in 5–7 business days
             </span>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1">
-              Fulfilled by Printful
+            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+              Premium Bella+Canvas tee
             </span>
+            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
+              Secure Stripe checkout
+            </span>
+          </div>
+          <div className="pointer-events-auto relative z-10 mx-auto mt-6 w-full max-w-xs">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Choose product</p>
+            <div
+              className="grid grid-cols-2 gap-2"
+              role="tablist"
+              aria-label="Choose product type"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={productType === 'shirt'}
+                onClick={() => handleProductTypeChange('shirt')}
+                className={`cursor-pointer rounded-lg border-2 px-3 py-2.5 text-sm font-semibold transition ${
+                  productType === 'shirt'
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                }`}
+              >
+                T-Shirt
+                <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">From $24.99</span>
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={productType === 'mug'}
+                onClick={() => handleProductTypeChange('mug')}
+                className={`cursor-pointer rounded-lg border-2 px-3 py-2.5 text-sm font-semibold transition ${
+                  productType === 'mug'
+                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
+                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+                }`}
+              >
+                Mug
+                <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">From $17.99</span>
+              </button>
+            </div>
           </div>
         </div>
 
@@ -456,12 +539,18 @@ export default function Home() {
 
         <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
           <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-            <div className="flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 lg:flex-1">
-              <h2 className="shrink-0 text-xl font-bold uppercase tracking-wide text-zinc-200">
-                YOLO your design
-              </h2>
-              <div className="mt-4 flex min-w-0 flex-col gap-6 lg:min-h-0 lg:flex-1">
-              <div className="space-y-4 lg:min-h-0 lg:flex-1">
+            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 lg:flex-1">
+              <div className="mb-1 flex items-center gap-2">
+                <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+                  Step 1
+                </span>
+              </div>
+              <h2 className="shrink-0 text-lg font-semibold text-zinc-100">Build your design</h2>
+              <p className="mt-1 shrink-0 text-sm text-zinc-500">
+                Enter a ticker and your price or options leg — we&apos;ll format it for print.
+              </p>
+              <div className="mt-4 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto lg:min-h-0">
+              <div className="space-y-4">
               <div>
                 <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
                   Stock Ticker
@@ -642,10 +731,11 @@ export default function Home() {
               <button
                 type="button"
                 onClick={() => void handleBuildDesign()}
-                className="w-full shrink-0 rounded-xl bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 text-lg font-black uppercase tracking-wide text-zinc-950 shadow-lg shadow-emerald-900/25 transition hover:shadow-emerald-500/20 active:scale-[0.99]"
+                className="w-full shrink-0 rounded-xl bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 text-base font-bold text-zinc-950 shadow-lg shadow-emerald-900/25 transition hover:shadow-emerald-500/20 active:scale-[0.99]"
               >
-                🚀 Print the play
+                Create preview
               </button>
+              <p className="text-center text-xs text-zinc-600">Free to preview · No account required</p>
               <button
                 type="button"
                 onClick={handleCopyShareLink}
@@ -659,11 +749,14 @@ export default function Home() {
           </div>
 
           <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-            {generatedDesign && (
+            {generatedDesign ? (
               <TShirtPreview
                 className="lg:h-full lg:min-h-0 lg:flex-1"
                 design={generatedDesign}
                 topic={generatedDesign.topic}
+                productType={productType}
+                orderSize={orderSize}
+                onOrderSizeChange={setOrderSize}
                 selectedColor={selectedColor}
                 onColorChange={setSelectedColor}
                 printLayoutControls={{
@@ -677,17 +770,56 @@ export default function Home() {
                   onAdvancedOpenChange: setDesignAdvancedOpen,
                 }}
               />
+            ) : (
+              <div className="flex h-full min-h-[280px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:min-h-0 lg:flex-1">
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                    Step 2
+                  </span>
+                </div>
+                <h2 className="mb-4 shrink-0 text-lg font-semibold text-zinc-100">
+                  {productType === 'mug' ? 'Mug preview' : 'Shirt preview'}
+                </h2>
+                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 p-6 text-center">
+                  <p className="text-sm text-zinc-400">
+                    Your {productType === 'mug' ? 'mug' : 'shirt'} preview will appear here.
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-600">
+                    Complete step 1 and tap &ldquo;Create preview&rdquo;.
+                  </p>
+                </div>
+              </div>
             )}
           </div>
 
           <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-            {generatedDesign && (
+            {generatedDesign ? (
               <Checkout
                 className="lg:h-full lg:min-h-0 lg:flex-1"
                 design={generatedDesign}
                 designTitle={generatedDesign.topic}
+                productType={productType}
+                orderSize={orderSize}
+                onOrderSizeChange={setOrderSize}
                 selectedColor={selectedColor}
               />
+            ) : (
+              <div className="flex h-full min-h-[280px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:min-h-0 lg:flex-1">
+                <div className="mb-1 flex items-center gap-2">
+                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
+                    Step 3
+                  </span>
+                </div>
+                <h2 className="mb-4 shrink-0 text-lg font-semibold text-zinc-100">Checkout</h2>
+                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 p-6 text-center">
+                  <p className="text-sm text-zinc-400">
+                    Size, shipping, and payment unlock after your preview is ready.
+                  </p>
+                  <p className="mt-2 text-xs text-zinc-600">
+                    {productType === 'mug' ? 'Mugs from $17.99' : 'Tees from $24.99'} · + $4.99 shipping
+                  </p>
+                </div>
+              </div>
             )}
           </div>
         </div>

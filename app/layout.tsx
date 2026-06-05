@@ -46,8 +46,14 @@ export default function RootLayout({
           </header>
           <div className="flex-1">{children}</div>
           <footer className="border-t border-zinc-800/80 bg-zinc-950/80">
-            <div className="mx-auto w-full max-w-6xl px-4 py-5 text-center text-xs text-zinc-500">
-              <p>Payments by Stripe. Fulfillment by Printful.</p>
+            <div className="mx-auto w-full max-w-6xl px-4 py-6 text-center text-xs text-zinc-500">
+              <p className="font-medium text-zinc-400">Secure checkout · Printed on demand · Ships in 5–7 business days</p>
+              <p className="mt-2">
+                Payments by Stripe · Fulfillment by Printful ·{' '}
+                <Link href="/returns" className="text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline">
+                  Returns policy
+                </Link>
+              </p>
             </div>
           </footer>
         </div>

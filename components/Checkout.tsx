@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { GeneratedDesign, ColorOption } from '@/lib/merch'
+import { getProductPricing, MUG_SIZES, type ProductType } from '@/lib/products'
 import { validateShippingAddress } from '@/lib/validate-address'
 import PaymentOptions from './PaymentOptions'
 import { Elements } from '@stripe/react-stripe-js'
@@ -14,22 +15,33 @@ const stripePromise = process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY
 interface CheckoutProps {
   design: GeneratedDesign
   designTitle: string
+  productType: ProductType
   selectedColor: ColorOption
+  orderSize: string
+  onOrderSizeChange: (size: string) => void
   className?: string
 }
 
-const SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
+const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
 
 type WizardStep = 'order' | 'shipping' | 'payment'
 
 const STEPS: { id: WizardStep; label: string }[] = [
   { id: 'order', label: 'Order' },
   { id: 'shipping', label: 'Shipping' },
-  { id: 'payment', label: 'Pay' },
+  { id: 'payment', label: 'Payment' },
 ]
 
-export default function Checkout({ design, designTitle, selectedColor, className = '' }: CheckoutProps) {
-  const [size, setSize] = useState('M')
+export default function Checkout({
+  design,
+  designTitle,
+  productType,
+  selectedColor,
+  orderSize,
+  onOrderSizeChange,
+  className = '',
+}: CheckoutProps) {
+  const isMug = productType === 'mug'
   const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -58,13 +70,15 @@ export default function Checkout({ design, designTitle, selectedColor, className
     [shippingInfo]
   )
 
-  const basePrice = 24.99
-  const shippingCost = 4.99
+  const { basePrice, shippingFlatRate: shippingCost } = getProductPricing(productType)
   const [estimatedTax, setEstimatedTax] = useState(0)
   const subtotal = basePrice * quantity
   const totalPrice = (subtotal + shippingCost + estimatedTax).toFixed(2)
 
-  const stepIndex = STEPS.findIndex((s) => s.id === step)
+  useEffect(() => {
+    setEstimatedTax(0)
+    setChargedTotal(null)
+  }, [quantity, orderSize, selectedColor.value, productType])
   const isFulfillmentRetry = Boolean(succeededPaymentIntentId)
 
   useEffect(() => {
@@ -91,7 +105,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
       lockedDesignKeyRef.current = null
       return
     }
-    const key = `${design.id}|${design.topic}|${design.imageUrl}`
+    const key = `${design.id}|${design.topic}|${design.imageUrl}|${productType}`
     if (lockedDesignKeyRef.current === null) {
       lockedDesignKeyRef.current = key
       return
@@ -105,12 +119,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
       setStep('shipping')
       setError('Design was updated. Continue from shipping to refresh payment with the latest print file.')
     }
-  }, [design.id, design.topic, design.imageUrl, paymentIntentClientSecret, showPaymentForm])
-
-  useEffect(() => {
-    setEstimatedTax(0)
-    setChargedTotal(null)
-  }, [quantity, size, selectedColor.value])
+  }, [design.id, design.topic, design.imageUrl, productType, paymentIntentClientSecret, showPaymentForm])
 
   useEffect(() => {
     const initializeCheckout = async () => {
@@ -122,7 +131,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
             designId: design.id,
             imageUrl: design.imageUrl,
             title: designTitle,
-            size,
+            size: orderSize,
             color: selectedColor.value,
             quantity,
           }),
@@ -136,7 +145,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
       }
     }
     initializeCheckout()
-  }, [design.id, design.imageUrl, designTitle, size, selectedColor.value, quantity])
+  }, [design.id, design.imageUrl, designTitle, orderSize, selectedColor.value, quantity, productType])
 
   const goBackToOrder = () => {
     setError(null)
@@ -176,9 +185,10 @@ export default function Checkout({ design, designTitle, selectedColor, className
           shipping: shippingInfo,
           orderDetails: {
             designId: design.id,
+            productType,
             imageUrl: design.imageUrl,
             title: designTitle,
-            size,
+            size: orderSize,
             color: selectedColor.value,
             quantity,
           },
@@ -233,8 +243,9 @@ export default function Checkout({ design, designTitle, selectedColor, className
           designId: design.id,
           imageUrl: design.imageUrl,
           title: designTitle,
-          size,
+          size: orderSize,
           color: selectedColor.value,
+          productType,
           quantity,
           shipping: finalShippingInfo,
         }),
@@ -269,31 +280,41 @@ export default function Checkout({ design, designTitle, selectedColor, className
     setLoading(false)
   }
 
+  const stepIndex = STEPS.findIndex((s) => s.id === step)
+
   return (
     <div
       className={`flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 ${className}`}
     >
-      <h2 className="mb-4 shrink-0 text-xl font-black uppercase tracking-wide text-zinc-100">🛒 Secure the bag</h2>
+      <div className="mb-1 flex items-center gap-2">
+        <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
+          Step 3
+        </span>
+      </div>
+      <h2 className="mb-1 shrink-0 text-lg font-semibold text-zinc-100">Checkout</h2>
+      <p className="mb-4 shrink-0 text-sm text-zinc-500">
+        Printed to order · Ships in 5–7 business days
+      </p>
 
       {!isFulfillmentRetry && !paymentSuccess && (
         <nav aria-label="Checkout steps" className="mb-6 shrink-0">
-          <ol className="flex items-center justify-center gap-1 sm:gap-2">
+          <ol className="flex items-center justify-center gap-2">
             {STEPS.map((s, i) => {
               const active = stepIndex === i
               const done = stepIndex > i
               return (
                 <li key={s.id} className="flex items-center">
-                  {i > 0 && <span className="mx-1 text-zinc-600 sm:mx-2">→</span>}
+                  {i > 0 && <span className="mx-1 hidden text-zinc-700 sm:inline">—</span>}
                   <span
-                    className={`text-xs font-semibold uppercase tracking-wide sm:text-sm ${
+                    className={`rounded-full px-3 py-1 text-xs font-medium sm:text-sm ${
                       active
-                        ? 'text-emerald-400'
+                        ? 'bg-emerald-500/15 text-emerald-300'
                         : done
-                          ? 'text-zinc-500'
+                          ? 'text-zinc-400'
                           : 'text-zinc-600'
                     }`}
                   >
-                    {i + 1}. {s.label}
+                    {s.label}
                   </span>
                 </li>
               )
@@ -312,15 +333,17 @@ export default function Checkout({ design, designTitle, selectedColor, className
         {step === 'order' && !isFulfillmentRetry && (
           <div className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-300">Size</label>
-              <div className="grid grid-cols-4 gap-2">
-                {SIZES.map((s) => (
+              <label className="mb-2 block text-sm font-medium text-zinc-300">
+                {isMug ? 'Mug size' : 'Size'}
+              </label>
+              <div className={`grid gap-2 ${isMug ? 'grid-cols-3' : 'grid-cols-4'}`}>
+                {(isMug ? MUG_SIZES : SHIRT_SIZES).map((s) => (
                   <button
                     key={s}
                     type="button"
-                    onClick={() => setSize(s)}
+                    onClick={() => onOrderSizeChange(s)}
                     className={`rounded-lg border-2 px-3 py-2 text-sm transition-colors ${
-                      size === s
+                      orderSize === s
                         ? 'border-emerald-500 bg-emerald-500/15 font-semibold text-emerald-300'
                         : 'border-zinc-700 hover:border-zinc-500'
                     }`}
@@ -329,6 +352,9 @@ export default function Checkout({ design, designTitle, selectedColor, className
                   </button>
                 ))}
               </div>
+              {isMug && (
+                <p className="mt-2 text-xs text-zinc-500">White Glossy Mug · {orderSize}</p>
+              )}
             </div>
             <div>
               <label className="mb-2 block text-sm font-medium text-zinc-300">Quantity</label>
@@ -371,13 +397,19 @@ export default function Checkout({ design, designTitle, selectedColor, className
               </div>
               <p className="mt-2 text-[11px] text-zinc-500">Tax may vary slightly based on destination.</p>
             </div>
-              <button
+            <button
               type="button"
               onClick={goToShipping}
-                className="w-full rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 font-bold uppercase tracking-wide text-zinc-950 shadow-lg shadow-emerald-900/25"
+              className="w-full rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 font-semibold text-zinc-950 shadow-lg shadow-emerald-900/25"
             >
               Continue to shipping
             </button>
+            <p className="text-center text-xs text-zinc-500">
+              Secure payment ·{' '}
+              <a href="/returns" className="text-zinc-400 underline-offset-2 hover:text-zinc-300 hover:underline">
+                Easy returns
+              </a>
+            </p>
           </div>
         )}
 
@@ -403,7 +435,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
             )}
             <div className="rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-xs text-zinc-300">
               <p className="mb-2 text-zinc-500">
-                {size} · {selectedColor.name} · Qty {quantity}
+                {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · Qty {quantity}
               </p>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -543,7 +575,7 @@ export default function Checkout({ design, designTitle, selectedColor, className
           <div className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
             <div className="rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-xs text-zinc-300">
               <p className="mb-2 text-zinc-500">
-                {size} · {selectedColor.name} · {shippingInfo.city || '…'}
+                {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · {shippingInfo.city || '…'}
               </p>
               <div className="space-y-1">
                 <div className="flex justify-between">
@@ -595,9 +627,10 @@ export default function Checkout({ design, designTitle, selectedColor, className
                       onError={handlePaymentError}
                       orderDetails={{
                         designId: design.id,
+                        productType,
                         imageUrl: design.imageUrl,
                         title: designTitle,
-                        size,
+                        size: orderSize,
                         color: selectedColor.value,
                         quantity,
                       }}
