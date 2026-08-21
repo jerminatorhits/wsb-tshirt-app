@@ -12,12 +12,47 @@ import {
   renderDesignToDataURL,
   type DesignLayoutPreset,
 } from '@/lib/text-design'
-import { MUG_SIZES, parseProductType, type ProductType } from '@/lib/products'
+import { getProductPricing, MUG_BASE_PRICE, MUG_SIZES, SHIRT_BASE_PRICE, SHIRT_SIZES, parseProductType, type ProductType } from '@/lib/products'
 
 interface TickerSearchResult {
   symbol: string
   name: string
 }
+
+const POPULAR_TICKERS: TickerSearchResult[] = [
+  { symbol: 'TSLA', name: 'Tesla' },
+  { symbol: 'NVDA', name: 'NVIDIA' },
+  { symbol: 'AAPL', name: 'Apple' },
+  { symbol: 'AMZN', name: 'Amazon' },
+  { symbol: 'MSFT', name: 'Microsoft' },
+  { symbol: 'GOOG', name: 'Alphabet' },
+  { symbol: 'META', name: 'Meta' },
+  { symbol: 'AMD', name: 'AMD' },
+  { symbol: 'GME', name: 'GameStop' },
+  { symbol: 'AMC', name: 'AMC Entertainment' },
+  { symbol: 'SPY', name: 'S&P 500 ETF' },
+  { symbol: 'QQQ', name: 'Nasdaq 100 ETF' },
+  { symbol: 'PLTR', name: 'Palantir' },
+  { symbol: 'COIN', name: 'Coinbase' },
+  { symbol: 'HOOD', name: 'Robinhood' },
+  { symbol: 'NFLX', name: 'Netflix' },
+  { symbol: 'INTC', name: 'Intel' },
+  { symbol: 'BA', name: 'Boeing' },
+  { symbol: 'DIS', name: 'Disney' },
+  { symbol: 'SOFI', name: 'SoFi' },
+]
+
+function filterTickerResults(query: string, items: TickerSearchResult[]) {
+  const q = query.trim().toUpperCase()
+  if (!q) return []
+  const startsWithSymbol = items.filter((item) => item.symbol.startsWith(q))
+  const named = items.filter(
+    (item) => !item.symbol.startsWith(q) && item.name.toUpperCase().includes(q)
+  )
+  return [...startsWithSymbol, ...named].slice(0, 8)
+}
+
+type AppStep = 'create' | 'shipping' | 'payment'
 
 export default function Home() {
   const [ticker, setTicker] = useState('')
@@ -36,6 +71,7 @@ export default function Home() {
   const [selectedColor, setSelectedColor] = useState<ColorOption>(COLORS[0])
   const [tickerSuggestions, setTickerSuggestions] = useState<TickerSearchResult[]>([])
   const [tickerSuggestionLoading, setTickerSuggestionLoading] = useState(false)
+  const [tickerMenuOpen, setTickerMenuOpen] = useState(false)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
   const [tickerPrefilledFromUrl, setTickerPrefilledFromUrl] = useState(false)
   const [designLayoutPreset, setDesignLayoutPreset] = useState<DesignLayoutPreset>('classic')
@@ -43,9 +79,23 @@ export default function Home() {
   /** auto: light ink on black/navy only */
   const [designInkMode, setDesignInkMode] = useState<'auto' | 'light' | 'dark'>('auto')
   const [designAdvancedOpen, setDesignAdvancedOpen] = useState(false)
-  const [productType, setProductType] = useState<ProductType>('shirt')
-  const [orderSize, setOrderSize] = useState('M')
+  const [productType, setProductType] = useState<ProductType>('mug')
+  const [orderSize, setOrderSize] = useState<string>(MUG_SIZES[0])
+  const [step, setStep] = useState<AppStep>('create')
+  const [quantity, setQuantity] = useState(1)
+  const [checkoutTax, setCheckoutTax] = useState(0)
+  const [designGenerating, setDesignGenerating] = useState(false)
   const designRefreshSeqRef = useRef(0)
+
+  const { basePrice, shippingFlatRate } = getProductPricing(productType)
+  const orderSubtotal = basePrice * quantity
+  const orderTotalPreview = (orderSubtotal + shippingFlatRate + checkoutTax).toFixed(2)
+
+  const goToStep = (next: AppStep) => {
+    if (next === 'create') setCheckoutTax(0)
+    setStep(next)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
+  }
 
   const cleanedTicker = ticker.trim().toUpperCase()
 
@@ -91,13 +141,6 @@ export default function Home() {
     () => (optionType === 'CALL' ? callStrikes : putStrikes),
     [optionType, callStrikes, putStrikes]
   )
-
-  const formatExpirationLabel = (unixTimestamp: number) =>
-    new Date(unixTimestamp * 1000).toLocaleDateString(undefined, {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-    })
 
   const formatOptionDateShort = (unixTimestamp: number) => {
     const date = new Date(unixTimestamp * 1000)
@@ -216,8 +259,12 @@ export default function Home() {
     const q = ticker.trim().toUpperCase()
     if (q.length < 1) {
       setTickerSuggestions([])
+      setTickerSuggestionLoading(false)
       return
     }
+
+    setTickerSuggestions(filterTickerResults(q, POPULAR_TICKERS))
+    setTickerMenuOpen(true)
 
     const controller = new AbortController()
     const timeout = setTimeout(async () => {
@@ -227,13 +274,11 @@ export default function Home() {
           signal: controller.signal,
         })
         const data = await response.json()
-        if (data.success) {
-          setTickerSuggestions(data.results || [])
-        } else {
-          setTickerSuggestions([])
+        if (data.success && Array.isArray(data.results) && data.results.length > 0) {
+          setTickerSuggestions(data.results)
         }
       } catch {
-        setTickerSuggestions([])
+        // Keep the local popular-ticker matches if the network search fails.
       } finally {
         setTickerSuggestionLoading(false)
       }
@@ -319,44 +364,53 @@ export default function Home() {
     return `Ticker: ${parsed.tickerText} | Options: ${parsed.primaryText} | Layout: ${layoutLabel} | Scale: ${designScale} | Ink: ${designInkMode}`
   }
 
-  /* eslint-disable react-hooks/exhaustive-deps -- refresh only when print options or form content change; omit full `generatedDesign` to avoid looping on `imageUrl` updates */
+  /* eslint-disable react-hooks/exhaustive-deps -- refresh when print options or form content change */
   useEffect(() => {
-    if (!generatedDesign) return
     const parsed = parseDesignForm()
-    if (!parsed.ok) return
+    if (!parsed.ok) {
+      setDesignGenerating(false)
+      return
+    }
 
     const seq = ++designRefreshSeqRef.current
-    void (async () => {
-      try {
-        await ensureDesignFontsLoaded()
-        const imageUrl = renderDesignToDataURL({
-          tickerText: parsed.tickerText,
-          primaryText: parsed.primaryText,
-          optionsText: parsed.optionsText,
-          preset: designLayoutPreset,
-          scale: designScale,
-          useLightInk: effectiveLightInk,
-          expressionMode,
-        })
-        if (seq !== designRefreshSeqRef.current) return
-        const prompt = buildPromptFromParsed(parsed)
-        setGeneratedDesign((prev) => {
-          if (!prev) return prev
-          return {
-            ...prev,
-            imageUrl,
+    setDesignGenerating(true)
+    const timeout = window.setTimeout(() => {
+      void (async () => {
+        try {
+          await ensureDesignFontsLoaded()
+          const imageUrl = renderDesignToDataURL({
+            tickerText: parsed.tickerText,
+            primaryText: parsed.primaryText,
+            optionsText: parsed.optionsText,
+            preset: designLayoutPreset,
+            scale: designScale,
+            useLightInk: effectiveLightInk,
+            expressionMode,
+          })
+          if (seq !== designRefreshSeqRef.current) return
+          const prompt = buildPromptFromParsed(parsed)
+          setGeneratedDesign((prev) => ({
+            id: prev?.id ?? `text-design-${Date.now()}`,
             topic: parsed.titleParts.join(' '),
+            imageUrl,
             prompt,
+            createdAt: prev?.createdAt ?? new Date().toISOString(),
+          }))
+          setErrorMessage(null)
+        } catch (e) {
+          if (seq === designRefreshSeqRef.current) {
+            console.error('Failed to refresh design preview:', e)
           }
-        })
-      } catch (e) {
-        if (seq === designRefreshSeqRef.current) {
-          console.error('Failed to refresh design preview:', e)
+        } finally {
+          if (seq === designRefreshSeqRef.current) {
+            setDesignGenerating(false)
+          }
         }
-      }
-    })()
+      })()
+    }, 80)
+
+    return () => window.clearTimeout(timeout)
   }, [
-    generatedDesign?.id,
     designLayoutPreset,
     designScale,
     designInkMode,
@@ -372,39 +426,18 @@ export default function Home() {
   ])
   /* eslint-enable react-hooks/exhaustive-deps */
 
-  const handleBuildDesign = async () => {
+  const handleCheckout = () => {
     const parsed = parseDesignForm()
     if (!parsed.ok) {
       setErrorMessage(parsed.error)
       return
     }
-
-    try {
-      await ensureDesignFontsLoaded()
-      const imageUrl = renderDesignToDataURL({
-        tickerText: parsed.tickerText,
-        primaryText: parsed.primaryText,
-        optionsText: parsed.optionsText,
-        preset: designLayoutPreset,
-        scale: designScale,
-        useLightInk: effectiveLightInk,
-        expressionMode,
-      })
-      const prompt = buildPromptFromParsed(parsed)
-
-      const designId = `text-design-${Date.now()}`
-      setGeneratedDesign({
-        id: designId,
-        topic: parsed.titleParts.join(' '),
-        imageUrl,
-        prompt,
-        createdAt: new Date().toISOString(),
-      })
-      setErrorMessage(null)
-    } catch (error) {
-      console.error('Failed to build design:', error)
-      setErrorMessage('Could not build design image. Please try again.')
+    if (!generatedDesign) {
+      setErrorMessage('Preview is still loading. Try again in a moment.')
+      return
     }
+    setErrorMessage(null)
+    goToStep('shipping')
   }
 
   const handleCopyShareLink = async () => {
@@ -424,7 +457,7 @@ export default function Home() {
     params.set('layout', designLayoutPreset)
     params.set('scale', String(designScale))
     params.set('ink', designInkMode)
-    if (productType === 'mug') params.set('product', 'mug')
+    params.set('product', productType)
 
     const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`
 
@@ -438,393 +471,419 @@ export default function Home() {
     }
   }
 
+  const parsedForm = parseDesignForm()
+  const canCheckout = parsedForm.ok && Boolean(generatedDesign)
+
   return (
-    <main className="relative overflow-hidden bg-zinc-950 text-zinc-100">
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(34,197,94,0.12),transparent)]" />
-      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_60%_40%_at_100%_50%,rgba(244,63,94,0.07),transparent)]" />
-      <div className="container relative z-10 mx-auto px-4 py-8 md:py-10">
-        <div className="relative z-10 mb-10 text-center">
-          <h1 className="text-4xl font-black tracking-tight sm:text-5xl md:text-6xl">
-            <span className="bg-gradient-to-r from-emerald-400 via-lime-400 to-rose-400 bg-clip-text text-transparent">
-              WSB Shirt Lab
-            </span>
-          </h1>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-zinc-300">
-            Turn your ticker, price, or options play into a premium printed tee or mug.
-          </p>
-          <p className="mx-auto mt-2 max-w-xl text-sm text-zinc-500">
-            Unlike most of your plays,{' '}
-            <span className="text-emerald-400/90">these actually ship</span>.
-          </p>
-          <ol className="mx-auto mt-8 flex max-w-2xl flex-col gap-3 text-left sm:flex-row sm:gap-4 sm:text-center">
-            {[
-              { n: '1', label: 'Enter your play', detail: 'Ticker, price, or option' },
-              { n: '2', label: 'Preview your design', detail: 'See it on the product' },
-              { n: '3', label: 'Checkout securely', detail: 'Stripe · printed to order' },
-            ].map((item) => (
-              <li
-                key={item.n}
-                className="flex flex-1 items-start gap-3 rounded-xl border border-zinc-800/80 bg-zinc-900/50 px-4 py-3 sm:flex-col sm:items-center sm:gap-2"
-              >
-                <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-emerald-500/15 text-sm font-bold text-emerald-400">
-                  {item.n}
-                </span>
+    <main>
+      <div className="mx-auto max-w-lg px-4 pb-16 pt-2">
+        {step === 'create' && (
+          <>
+            <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
+              Your ticker, on merch.
+            </h1>
+            <p className="mt-1 text-sm text-neutral-500">Printed to order. Ships in 5–7 days.</p>
+
+            {errorMessage && <p className="mt-4 text-sm text-red-600">{errorMessage}</p>}
+
+            <div className="mt-8 space-y-6">
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  aria-pressed={productType === 'mug'}
+                  onClick={() => handleProductTypeChange('mug')}
+                  className={`rounded-lg border px-3 py-2.5 text-sm transition ${
+                    productType === 'mug' ? 'rh-toggle-active' : 'rh-toggle-inactive'
+                  }`}
+                >
+                  {`Mug · $${MUG_BASE_PRICE.toFixed(2)}`}
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={productType === 'shirt'}
+                  onClick={() => handleProductTypeChange('shirt')}
+                  className={`rounded-lg border px-3 py-2.5 text-sm transition ${
+                    productType === 'shirt' ? 'rh-toggle-active' : 'rh-toggle-inactive'
+                  }`}
+                >
+                  {`T-shirt · $${SHIRT_BASE_PRICE.toFixed(2)}`}
+                </button>
+              </div>
+
+              {productType === 'mug' ? (
                 <div>
-                  <p className="text-sm font-semibold text-zinc-200">{item.label}</p>
-                  <p className="text-xs text-zinc-500">{item.detail}</p>
+                  <label className="rh-label">Size</label>
+                  <div className="grid grid-cols-3 gap-2">
+                    {MUG_SIZES.map((s) => (
+                      <button
+                        key={s}
+                        type="button"
+                        onClick={() => setOrderSize(s)}
+                        className={`rounded-lg border px-2 py-2 text-sm transition ${
+                          orderSize === s ? 'rh-toggle-active' : 'rh-toggle-inactive'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </li>
-            ))}
-          </ol>
-          <div className="mx-auto mt-6 flex w-full max-w-3xl flex-wrap items-center justify-center gap-2 text-xs text-zinc-400 sm:gap-3">
-            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
-              Ships in 5–7 business days
-            </span>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
-              Premium Bella+Canvas tee
-            </span>
-            <span className="rounded-full border border-zinc-800 bg-zinc-900/70 px-3 py-1.5">
-              Secure Stripe checkout
-            </span>
-          </div>
-          <div className="pointer-events-auto relative z-10 mx-auto mt-6 w-full max-w-xs">
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-zinc-500">Choose product</p>
-            <div
-              className="grid grid-cols-2 gap-2"
-              role="tablist"
-              aria-label="Choose product type"
-            >
-              <button
-                type="button"
-                role="tab"
-                aria-selected={productType === 'shirt'}
-                onClick={() => handleProductTypeChange('shirt')}
-                className={`cursor-pointer rounded-lg border-2 px-3 py-2.5 text-sm font-semibold transition ${
-                  productType === 'shirt'
-                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
+              ) : (
+                <div className="space-y-4">
+                  <div>
+                    <label className="rh-label">Size</label>
+                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
+                      {SHIRT_SIZES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setOrderSize(s)}
+                          className={`rounded-lg border px-2 py-2 text-sm transition ${
+                            orderSize === s ? 'rh-toggle-active' : 'rh-toggle-inactive'
+                          }`}
+                        >
+                          {s}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <label className="rh-label">Color</label>
+                    <div className="flex gap-2">
+                      {COLORS.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => setSelectedColor(c)}
+                          className={`h-8 w-8 rounded-full border transition ${
+                            selectedColor.value === c.value
+                              ? 'border-neutral-900 ring-2 ring-neutral-900/20'
+                              : 'border-neutral-300 hover:border-neutral-400'
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                          title={c.name}
+                          aria-label={c.name}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="rh-label">Print</label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    aria-pressed={expressionMode === 'price'}
+                    onClick={() => setExpressionMode('price')}
+                    className={`rounded-lg border px-3 py-2.5 text-sm transition ${
+                      expressionMode === 'price' ? 'rh-toggle-active' : 'rh-toggle-inactive'
+                    }`}
+                  >
+                    Stock price
+                  </button>
+                  <button
+                    type="button"
+                    aria-pressed={expressionMode === 'option'}
+                    onClick={() => setExpressionMode('option')}
+                    className={`rounded-lg border px-3 py-2.5 text-sm transition ${
+                      expressionMode === 'option' ? 'rh-toggle-active' : 'rh-toggle-inactive'
+                    }`}
+                  >
+                    Options contract
+                  </button>
+                </div>
+              </div>
+
+              <div
+                className={`relative z-30 grid gap-2 ${
+                  expressionMode === 'price' ? 'grid-cols-2' : 'grid-cols-4'
                 }`}
               >
-                T-Shirt
-                <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">From $24.99</span>
-              </button>
-              <button
-                type="button"
-                role="tab"
-                aria-selected={productType === 'mug'}
-                onClick={() => handleProductTypeChange('mug')}
-                className={`cursor-pointer rounded-lg border-2 px-3 py-2.5 text-sm font-semibold transition ${
-                  productType === 'mug'
-                    ? 'border-emerald-500 bg-emerald-500/15 text-emerald-300'
-                    : 'border-zinc-700 text-zinc-400 hover:border-zinc-500'
-                }`}
-              >
-                Mug
-                <span className="mt-0.5 block text-[10px] font-normal text-zinc-500">From $17.99</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-        {errorMessage && (
-          <div className="mb-6 rounded-xl border border-rose-500/50 bg-rose-950/40 p-4">
-            <div className="flex items-center gap-3">
-              <span className="text-2xl">⚠️</span>
-              <div>
-                <p className="font-medium text-rose-200">{errorMessage}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <div className="grid grid-cols-1 items-stretch gap-8 lg:grid-cols-3">
-          <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-            <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 lg:flex-1">
-              <div className="mb-1 flex items-center gap-2">
-                <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-                  Step 1
-                </span>
-              </div>
-              <h2 className="shrink-0 text-lg font-semibold text-zinc-100">Build your design</h2>
-              <p className="mt-1 shrink-0 text-sm text-zinc-500">
-                Enter a ticker and your price or options leg — we&apos;ll format it for print.
-              </p>
-              <div className="mt-4 flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto lg:min-h-0">
-              <div className="space-y-4">
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  Stock Ticker
-                </label>
                 <div className="relative">
+                  <label className="rh-label" htmlFor="ticker">
+                    Ticker
+                  </label>
                   <input
+                    id="ticker"
                     type="text"
                     value={ticker}
                     onChange={(e) => {
                       setTickerPrefilledFromUrl(false)
                       setTicker(e.target.value.toUpperCase())
+                      setTickerMenuOpen(true)
+                    }}
+                    onFocus={() => {
+                      if (ticker.trim()) setTickerMenuOpen(true)
+                    }}
+                    onBlur={() => {
+                      window.setTimeout(() => setTickerMenuOpen(false), 150)
                     }}
                     placeholder="TSLA"
                     maxLength={6}
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
+                    className="rh-input px-2 sm:px-3"
+                    autoComplete="off"
+                    role="combobox"
+                    aria-expanded={tickerMenuOpen}
+                    aria-controls="ticker-suggestions"
                   />
-                  {ticker && (tickerSuggestions.length > 0 || tickerSuggestionLoading) && (
-                    <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-lg border border-zinc-700 bg-zinc-900 shadow-xl">
-                      {tickerSuggestionLoading ? (
-                        <p className="px-3 py-2 text-sm text-zinc-500">Searching symbols...</p>
+                  {tickerMenuOpen && ticker && (tickerSuggestions.length > 0 || tickerSuggestionLoading) && (
+                    <div
+                      id="ticker-suggestions"
+                      role="listbox"
+                      className="absolute left-0 top-full z-50 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lg"
+                    >
+                      {tickerSuggestions.length === 0 && tickerSuggestionLoading ? (
+                        <p className="px-3 py-2 text-sm text-neutral-400">Searching…</p>
                       ) : (
                         tickerSuggestions.map((item) => (
                           <button
                             key={`${item.symbol}-${item.name}`}
                             type="button"
-                            onClick={() => {
+                            role="option"
+                            onMouseDown={(e) => {
+                              e.preventDefault()
                               setTickerPrefilledFromUrl(true)
                               setTicker(item.symbol)
                               setTickerSuggestions([])
+                              setTickerMenuOpen(false)
                             }}
-                            className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-zinc-800"
+                            className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-50"
                           >
-                            <span className="font-semibold text-emerald-400">{item.symbol}</span>
-                            <span className="ml-3 truncate text-sm text-zinc-500">{item.name}</span>
+                            <span className="font-semibold">{item.symbol}</span>
+                            <span className="ml-3 truncate text-sm text-neutral-400">{item.name}</span>
                           </button>
                         ))
                       )}
                     </div>
                   )}
                 </div>
-              </div>
-              <div>
-                <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                  Mode
-                </label>
-                <div className="grid grid-cols-2 gap-2 rounded-lg border border-zinc-700 bg-zinc-950/80 p-2">
-                  <button
-                    type="button"
-                    onClick={() => setExpressionMode('price')}
-                    className={`rounded-md px-3 py-2 text-sm font-bold transition ${
-                      expressionMode === 'price'
-                        ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-900/35'
-                        : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    Price
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExpressionMode('option')}
-                    className={`rounded-md px-3 py-2 text-sm font-bold transition ${
-                      expressionMode === 'option'
-                        ? 'bg-rose-600 text-white shadow-lg shadow-rose-900/35'
-                        : 'bg-zinc-900 text-zinc-400 hover:text-zinc-200'
-                    }`}
-                  >
-                    Option
-                  </button>
-                </div>
-              </div>
 
-              {expressionMode === 'price' && (
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    Price
-                  </label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={numberValue}
-                    onChange={(e) => {
-                      const next = e.target.value.replace(/[^0-9.]/g, '')
-                      const normalized = next
-                        .replace(/^\./, '')
-                        .replace(/(\..*)\./g, '$1')
-                      setNumberValue(normalized)
-                    }}
-                    placeholder="500"
-                    className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-4 py-3 text-white placeholder-zinc-600 focus:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                  />
-                </div>
-              )}
-
-              {expressionMode === 'option' && (
-                <div>
-                  <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-zinc-500">
-                    Position
-                  </label>
-                  <div className="space-y-3 rounded-lg border border-zinc-700 bg-zinc-950/50 p-3">
-                    <div className="space-y-3">
-                      <div className="flex gap-4">
-                        <label className="flex items-center gap-2 text-sm text-zinc-300">
-                          <input
-                            type="radio"
-                            name="optionType"
-                            value="CALL"
-                            checked={optionType === 'CALL'}
-                            onChange={() => setOptionType('CALL')}
-                          />
-                          Call
-                        </label>
-                        <label className="flex items-center gap-2 text-sm text-zinc-300">
-                          <input
-                            type="radio"
-                            name="optionType"
-                            value="PUT"
-                            checked={optionType === 'PUT'}
-                            onChange={() => setOptionType('PUT')}
-                          />
-                          Put
-                        </label>
-                      </div>
-
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-zinc-500">
-                          Expiration
-                        </label>
-                        <select
-                          value={selectedExpiration}
-                          onChange={(e) => setSelectedExpiration(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                        >
-                          {expirationDates.length === 0 ? (
-                            <option value="">No expirations loaded</option>
-                          ) : (
-                            expirationDates.map((date) => (
-                              <option key={date} value={String(date)}>
-                                {formatExpirationLabel(date)}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label className="mb-1 block text-xs font-medium text-zinc-500">
-                          Strike
-                        </label>
-                        <select
-                          value={selectedStrike}
-                          onChange={(e) => setSelectedStrike(e.target.value)}
-                          className="w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white focus:border-emerald-500/60 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
-                        >
-                          {activeStrikes.length === 0 ? (
-                            <option value="">No strikes loaded</option>
-                          ) : (
-                            activeStrikes.map((strike) => (
-                              <option key={strike} value={String(strike)}>
-                                {strike}
-                              </option>
-                            ))
-                          )}
-                        </select>
-                      </div>
-
-                      <div className="text-xs text-zinc-500">
-                        {optionDataLoading && <p>Loading options chain...</p>}
-                        {!optionDataLoading && optionDataError && (
-                          <p>{optionDataError}. Try another ticker.</p>
-                        )}
-                      </div>
-                    </div>
+                {expressionMode === 'price' ? (
+                  <div>
+                    <label className="rh-label" htmlFor="price">
+                      Price
+                    </label>
+                    <input
+                      id="price"
+                      type="text"
+                      inputMode="decimal"
+                      value={numberValue}
+                      onChange={(e) => {
+                        const next = e.target.value.replace(/[^0-9.]/g, '')
+                        const normalized = next.replace(/^\./, '').replace(/(\..*)\./g, '$1')
+                        setNumberValue(normalized)
+                      }}
+                      placeholder="500"
+                      className="rh-input"
+                    />
                   </div>
+                ) : (
+                  <>
+                    <div>
+                      <label className="rh-label" htmlFor="option-type">
+                        Type
+                      </label>
+                      <select
+                        id="option-type"
+                        value={optionType}
+                        onChange={(e) => setOptionType(e.target.value === 'PUT' ? 'PUT' : 'CALL')}
+                        className="rh-input px-2"
+                      >
+                        <option value="CALL">Call</option>
+                        <option value="PUT">Put</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="rh-label" htmlFor="expiration">
+                        Exp
+                      </label>
+                      <select
+                        id="expiration"
+                        value={selectedExpiration}
+                        onChange={(e) => setSelectedExpiration(e.target.value)}
+                        className="rh-input px-2"
+                      >
+                        {optionDataLoading && expirationDates.length === 0 ? (
+                          <option value="">Loading…</option>
+                        ) : expirationDates.length === 0 ? (
+                          <option value="">{optionDataError ? 'Unavailable' : '—'}</option>
+                        ) : (
+                          expirationDates.map((date) => (
+                            <option key={date} value={String(date)}>
+                              {formatOptionDateShort(date)}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                    <div>
+                      <label className="rh-label" htmlFor="strike">
+                        Strike
+                      </label>
+                      <select
+                        id="strike"
+                        value={selectedStrike}
+                        onChange={(e) => setSelectedStrike(e.target.value)}
+                        className="rh-input px-2"
+                      >
+                        {optionDataLoading && activeStrikes.length === 0 ? (
+                          <option value="">Loading…</option>
+                        ) : activeStrikes.length === 0 ? (
+                          <option value="">{optionDataError ? 'Unavailable' : '—'}</option>
+                        ) : (
+                          activeStrikes.map((strike) => (
+                            <option key={strike} value={String(strike)}>
+                              {strike}
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {generatedDesign ? (
+                <TShirtPreview
+                  key={productType}
+                  embedded
+                  design={generatedDesign}
+                  topic={generatedDesign.topic}
+                  productType={productType}
+                  orderSize={orderSize}
+                  onOrderSizeChange={setOrderSize}
+                  selectedColor={selectedColor}
+                  onColorChange={setSelectedColor}
+                  printLayoutControls={{
+                    preset: designLayoutPreset,
+                    onPresetChange: setDesignLayoutPreset,
+                    scale: designScale,
+                    onScaleChange: setDesignScale,
+                    inkMode: designInkMode,
+                    onInkModeChange: setDesignInkMode,
+                    advancedOpen: designAdvancedOpen,
+                    onAdvancedOpenChange: setDesignAdvancedOpen,
+                  }}
+                />
+              ) : (
+                <div className="flex min-h-[220px] items-center justify-center rounded-xl bg-white px-4 text-center text-sm text-neutral-400">
+                  Enter a ticker and price to preview your {productType === 'mug' ? 'mug' : 't-shirt'}
                 </div>
               )}
+
+              <div>
+                <p className="text-sm text-neutral-500">Quantity</p>
+                <div className="mt-1 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1}
+                    className="h-9 w-9 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center">{quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                    disabled={quantity >= 10}
+                    className="h-9 w-9 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+                  >
+                    +
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-1 text-sm">
+                <div className="flex justify-between text-neutral-600">
+                  <span>Subtotal{quantity > 1 ? ` · ${quantity} × $${basePrice.toFixed(2)}` : ''}</span>
+                  <span className="tabular-nums">${orderSubtotal.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between text-neutral-600">
+                  <span>Shipping</span>
+                  <span className="tabular-nums">${shippingFlatRate.toFixed(2)}</span>
+                </div>
+                {checkoutTax > 0 && (
+                  <div className="flex justify-between text-neutral-600">
+                    <span>Tax</span>
+                    <span className="tabular-nums">${checkoutTax.toFixed(2)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold text-neutral-900">
+                  <span>Total</span>
+                  <span className="tabular-nums">${orderTotalPreview}</span>
+                </div>
               </div>
 
               <button
                 type="button"
-                onClick={() => void handleBuildDesign()}
-                className="w-full shrink-0 rounded-xl bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 text-base font-bold text-zinc-950 shadow-lg shadow-emerald-900/25 transition hover:shadow-emerald-500/20 active:scale-[0.99]"
+                onClick={handleCheckout}
+                disabled={!canCheckout}
+                className="rh-btn-primary"
               >
-                Create preview
+                {designGenerating && !generatedDesign
+                  ? 'Generating preview…'
+                  : 'Checkout'}
               </button>
-              <p className="text-center text-xs text-zinc-600">Free to preview · No account required</p>
-              <button
-                type="button"
-                onClick={handleCopyShareLink}
-                className="w-full shrink-0 rounded-lg border border-zinc-700 bg-zinc-900/90 px-4 py-2.5 text-sm font-semibold text-zinc-200 transition hover:bg-zinc-800"
-              >
-                Copy design link
-              </button>
-              {shareStatus && <p className="text-center text-xs text-zinc-500">{shareStatus}</p>}
+
+              <div className="flex items-center justify-center gap-3 text-xs text-neutral-400">
+                <button type="button" onClick={() => void handleCopyShareLink()} className="hover:text-neutral-700">
+                  Copy link
+                </button>
+                {shareStatus && <span>{shareStatus}</span>}
               </div>
             </div>
-          </div>
+          </>
+        )}
 
-          <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-            {generatedDesign ? (
-              <TShirtPreview
-                className="lg:h-full lg:min-h-0 lg:flex-1"
-                design={generatedDesign}
-                topic={generatedDesign.topic}
-                productType={productType}
-                orderSize={orderSize}
-                onOrderSizeChange={setOrderSize}
-                selectedColor={selectedColor}
-                onColorChange={setSelectedColor}
-                printLayoutControls={{
-                  preset: designLayoutPreset,
-                  onPresetChange: setDesignLayoutPreset,
-                  scale: designScale,
-                  onScaleChange: setDesignScale,
-                  inkMode: designInkMode,
-                  onInkModeChange: setDesignInkMode,
-                  advancedOpen: designAdvancedOpen,
-                  onAdvancedOpenChange: setDesignAdvancedOpen,
-                }}
-              />
-            ) : (
-              <div className="flex h-full min-h-[280px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:min-h-0 lg:flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                    Step 2
-                  </span>
-                </div>
-                <h2 className="mb-4 shrink-0 text-lg font-semibold text-zinc-100">
-                  {productType === 'mug' ? 'Mug preview' : 'Shirt preview'}
-                </h2>
-                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 p-6 text-center">
-                  <p className="text-sm text-zinc-400">
-                    Your {productType === 'mug' ? 'mug' : 'shirt'} preview will appear here.
-                  </p>
-                  <p className="mt-2 text-xs text-zinc-600">
-                    Complete step 1 and tap &ldquo;Create preview&rdquo;.
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="flex min-w-0 flex-col lg:h-full lg:min-h-0">
-            {generatedDesign ? (
+        {(step === 'shipping' || step === 'payment') && generatedDesign && (
+          <>
+            <button
+              type="button"
+              onClick={() => goToStep(step === 'payment' ? 'shipping' : 'create')}
+              className="text-sm text-neutral-500 hover:text-neutral-900"
+            >
+              ← Back
+            </button>
+            <p className="mt-4 text-sm text-neutral-500">
+              {generatedDesign.topic}
+              {' · '}
+              {productType === 'mug' ? 'Mug' : 'Tee'}
+              {' · '}
+              {orderSize}
+              {productType !== 'mug' ? ` · ${selectedColor.name}` : ''}
+              {' · '}
+              Qty {quantity}
+            </p>
+            <div className="mt-1 flex items-baseline justify-between">
+              <h1 className="text-2xl font-semibold tracking-tight">
+                {step === 'shipping' ? 'Shipping' : 'Payment'}
+              </h1>
+              <p className="text-lg font-semibold tabular-nums">${orderTotalPreview}</p>
+            </div>
+            <div className="mt-6">
               <Checkout
-                className="lg:h-full lg:min-h-0 lg:flex-1"
+                embedded
+                wizardMode
+                wizardStep={step}
+                onWizardStepChange={(next) => goToStep(next)}
+                onWizardBack={() => goToStep('create')}
+                onTaxUpdate={(tax) => setCheckoutTax(tax)}
                 design={generatedDesign}
                 designTitle={generatedDesign.topic}
                 productType={productType}
                 orderSize={orderSize}
                 onOrderSizeChange={setOrderSize}
                 selectedColor={selectedColor}
+                quantity={quantity}
+                onQuantityChange={setQuantity}
               />
-            ) : (
-              <div className="flex h-full min-h-[280px] flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:min-h-0 lg:flex-1">
-                <div className="mb-1 flex items-center gap-2">
-                  <span className="rounded-md bg-zinc-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-zinc-500">
-                    Step 3
-                  </span>
-                </div>
-                <h2 className="mb-4 shrink-0 text-lg font-semibold text-zinc-100">Checkout</h2>
-                <div className="flex flex-1 flex-col items-center justify-center rounded-xl border border-dashed border-zinc-800 bg-zinc-950/80 p-6 text-center">
-                  <p className="text-sm text-zinc-400">
-                    Size, shipping, and payment unlock after your preview is ready.
-                  </p>
-                  <p className="mt-2 text-xs text-zinc-600">
-                    {productType === 'mug' ? 'Mugs from $17.99' : 'Tees from $24.99'} · + $4.99 shipping
-                  </p>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
+            </div>
+          </>
+        )}
       </div>
     </main>
   )
 }
-

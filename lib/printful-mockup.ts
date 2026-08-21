@@ -1,4 +1,5 @@
 import axios from 'axios'
+import { createHash } from 'crypto'
 import { buildPrintfulOrderFiles, getPrintfulVariantId } from '@/lib/printful-print-files'
 import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 import {
@@ -34,6 +35,13 @@ function pickMockupUrl(mockups: MockupEntry[] | undefined): string | null {
     (e) => e.option === 'Front view' || e.title === 'Front view'
   )
   return frontView?.url || mockup.mockup_url || null
+}
+
+const mockupMemCache = new Map<string, GenerateMockupResult & { success: true }>()
+
+function mockupCacheKey(input: GenerateMockupInput, productType: ProductType, color: string, size: string) {
+  const imageHash = createHash('sha1').update(input.imageUrl).digest('hex').slice(0, 16)
+  return `${productType}:${color}:${size}:${imageHash}`
 }
 
 async function ensurePublicImageUrl(imageUrl: string, appBaseUrl: string): Promise<string> {
@@ -88,6 +96,10 @@ export async function generatePrintfulMockup(input: GenerateMockupInput): Promis
     }
   }
 
+  const cacheKey = mockupCacheKey(input, productType, color, size)
+  const cached = mockupMemCache.get(cacheKey)
+  if (cached) return cached
+
   let finalImageUrl: string
   try {
     finalImageUrl = await ensurePublicImageUrl(input.imageUrl, appBaseUrl)
@@ -126,9 +138,12 @@ export async function generatePrintfulMockup(input: GenerateMockupInput): Promis
       return { success: false, error: 'Failed to create Printful mockup task' }
     }
 
-    const maxAttempts = 15
+    const maxAttempts = 12
+    const pollDelaysMs = [700, 1000, 1200, 1500]
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      await new Promise((resolve) =>
+        setTimeout(resolve, pollDelaysMs[Math.min(attempt, pollDelaysMs.length - 1)])
+      )
 
       const statusResponse = await axios.get(
         `https://api.printful.com/mockup-generator/task?task_key=${taskKey}`,
@@ -139,7 +154,9 @@ export async function generatePrintfulMockup(input: GenerateMockupInput): Promis
       if (status === 'completed') {
         const mockupUrl = pickMockupUrl(statusResponse.data?.result?.mockups)
         if (mockupUrl) {
-          return { success: true, mockupUrl, variantId, productType }
+          const result = { success: true as const, mockupUrl, variantId, productType }
+          mockupMemCache.set(cacheKey, result)
+          return result
         }
         return { success: false, error: 'Printful mockup completed without image URL' }
       }

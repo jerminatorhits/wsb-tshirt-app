@@ -1,8 +1,8 @@
 export default function PrivacyPage() {
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-10 text-zinc-200">
-      <h1 className="text-3xl font-bold text-zinc-100">Privacy Policy</h1>
-      <div className="mt-6 space-y-4 text-sm text-zinc-300">
+    <main className="mx-auto w-full max-w-lg px-4 py-8 text-neutral-700">
+      <h1 className="text-2xl font-semibold text-neutral-900">Privacy Policy</h1>
+      <div className="mt-6 space-y-4 text-sm">
         <p>
           We collect only the information required to process and deliver your order, including contact details, shipping address, and payment status data.
         </p>

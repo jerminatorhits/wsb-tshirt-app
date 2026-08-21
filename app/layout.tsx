@@ -5,7 +5,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'WSB Shirt Lab',
-  description: 'WallStreet Bets style tees — ticker, price, and options. YOLO energy, real shirts.',
+  description: 'Put your ticker on a mug or tee. Printed to order.',
 }
 
 export default function RootLayout({
@@ -18,42 +18,33 @@ export default function RootLayout({
       lang="en"
       className={`${fontAnton.variable} ${fontBebas.variable} ${fontOswald.variable} ${fontJetbrains.variable}`}
     >
-      <body className="min-h-screen bg-zinc-950 text-zinc-100 antialiased">
+      <body className="min-h-screen bg-background text-neutral-900 antialiased">
         <div className="flex min-h-screen flex-col">
-          <header className="sticky top-0 z-40 border-b border-zinc-800/70 bg-zinc-950/95">
-            <div className="mx-auto flex w-full max-w-6xl items-center justify-between gap-4 px-4 py-3">
-              <Link href="/" className="text-sm font-semibold tracking-wide text-zinc-100 hover:text-emerald-300 sm:text-base">
+          <header>
+            <div className="mx-auto flex w-full max-w-lg items-center justify-between px-4 py-5">
+              <Link href="/" className="text-sm font-semibold tracking-tight text-neutral-900">
                 WSB Shirt Lab
               </Link>
-              <nav className="flex flex-wrap items-center gap-3 text-xs text-zinc-400 sm:gap-4 sm:text-sm">
-                <Link href="/shipping" className="hover:text-zinc-200">
-                  Shipping
-                </Link>
-                <Link href="/returns" className="hover:text-zinc-200">
-                  Returns
-                </Link>
-                <Link href="/contact" className="hover:text-zinc-200">
-                  Contact
-                </Link>
-                <Link href="/privacy" className="hover:text-zinc-200">
-                  Privacy
-                </Link>
-                <Link href="/terms" className="hover:text-zinc-200">
-                  Terms
-                </Link>
-              </nav>
+              <Link href="/contact" className="text-sm text-neutral-500 hover:text-neutral-900">
+                Contact
+              </Link>
             </div>
           </header>
           <div className="flex-1">{children}</div>
-          <footer className="border-t border-zinc-800/80 bg-zinc-950/80">
-            <div className="mx-auto w-full max-w-6xl px-4 py-6 text-center text-xs text-zinc-500">
-              <p className="font-medium text-zinc-400">Secure checkout · Printed on demand · Ships in 5–7 business days</p>
-              <p className="mt-2">
-                Payments by Stripe · Fulfillment by Printful ·{' '}
-                <Link href="/returns" className="text-zinc-400 underline-offset-2 hover:text-zinc-200 hover:underline">
-                  Returns policy
-                </Link>
-              </p>
+          <footer className="mt-auto">
+            <div className="mx-auto flex w-full max-w-lg flex-wrap items-center justify-center gap-x-4 gap-y-1 px-4 py-8 text-sm text-neutral-400">
+              <Link href="/shipping" className="hover:text-neutral-700">
+                Shipping
+              </Link>
+              <Link href="/returns" className="hover:text-neutral-700">
+                Returns
+              </Link>
+              <Link href="/privacy" className="hover:text-neutral-700">
+                Privacy
+              </Link>
+              <Link href="/terms" className="hover:text-neutral-700">
+                Terms
+              </Link>
             </div>
           </footer>
         </div>
@@ -61,4 +52,3 @@ export default function RootLayout({
     </html>
   )
 }
-

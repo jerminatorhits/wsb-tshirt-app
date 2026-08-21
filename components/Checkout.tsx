@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { GeneratedDesign, ColorOption } from '@/lib/merch'
-import { getProductPricing, MUG_SIZES, type ProductType } from '@/lib/products'
+import { getProductPricing, MUG_SIZES, SHIRT_SIZES, type ProductType } from '@/lib/products'
 import { validateShippingAddress } from '@/lib/validate-address'
 import PaymentOptions from './PaymentOptions'
 import { Elements } from '@stripe/react-stripe-js'
@@ -19,10 +19,17 @@ interface CheckoutProps {
   selectedColor: ColorOption
   orderSize: string
   onOrderSizeChange: (size: string) => void
+  quantity: number
+  onQuantityChange?: (quantity: number) => void
   className?: string
+  /** When true, skip the order step; parent handles size/qty on preview step. */
+  wizardMode?: boolean
+  wizardStep?: 'shipping' | 'payment'
+  onWizardStepChange?: (step: 'shipping' | 'payment') => void
+  onWizardBack?: () => void
+  onTaxUpdate?: (tax: number, total: number | null) => void
+  embedded?: boolean
 }
-
-const SHIRT_SIZES = ['XS', 'S', 'M', 'L', 'XL', '2XL', '3XL']
 
 type WizardStep = 'order' | 'shipping' | 'payment'
 
@@ -39,10 +46,17 @@ export default function Checkout({
   selectedColor,
   orderSize,
   onOrderSizeChange,
+  quantity,
+  onQuantityChange,
   className = '',
+  wizardMode = false,
+  wizardStep,
+  onWizardStepChange,
+  onWizardBack,
+  onTaxUpdate,
+  embedded = false,
 }: CheckoutProps) {
   const isMug = productType === 'mug'
-  const [quantity, setQuantity] = useState(1)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showShippingForm, setShowShippingForm] = useState(true)
@@ -51,7 +65,7 @@ export default function Checkout({
   const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null)
   const [chargedTotal, setChargedTotal] = useState<number | null>(null)
   const [succeededPaymentIntentId, setSucceededPaymentIntentId] = useState<string | null>(null)
-  const [step, setStep] = useState<WizardStep>('order')
+  const [step, setStep] = useState<WizardStep>(wizardMode ? 'shipping' : 'order')
 
   const [shippingInfo, setShippingInfo] = useState({
     name: '',
@@ -78,20 +92,36 @@ export default function Checkout({
   useEffect(() => {
     setEstimatedTax(0)
     setChargedTotal(null)
+    onTaxUpdate?.(0, null)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- reset totals when order inputs change
   }, [quantity, orderSize, selectedColor.value, productType])
   const isFulfillmentRetry = Boolean(succeededPaymentIntentId)
 
   useEffect(() => {
+    if (!wizardMode || !wizardStep) return
+    setStep(wizardStep)
+    if (wizardStep === 'payment') {
+      setShowPaymentForm(true)
+    } else {
+      setShowPaymentForm(false)
+      setPaymentIntentClientSecret(null)
+      setChargedTotal(null)
+    }
+  }, [wizardMode, wizardStep])
+
+  useEffect(() => {
     if (isFulfillmentRetry) {
       setStep('shipping')
+      onWizardStepChange?.('shipping')
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- fulfillment retry is one-way
   }, [isFulfillmentRetry])
 
   useEffect(() => {
-    if (showPaymentForm && !isFulfillmentRetry) {
+    if (showPaymentForm && !isFulfillmentRetry && !wizardMode) {
       setStep('payment')
     }
-  }, [showPaymentForm, isFulfillmentRetry])
+  }, [showPaymentForm, isFulfillmentRetry, wizardMode])
 
   /**
    * PaymentIntent metadata stores `imageUrl` at creation time. If the on-page design refreshes
@@ -117,9 +147,10 @@ export default function Checkout({
       setEstimatedTax(0)
       setShowPaymentForm(false)
       setStep('shipping')
+      onWizardStepChange?.('shipping')
       setError('Design was updated. Continue from shipping to refresh payment with the latest print file.')
     }
-  }, [design.id, design.topic, design.imageUrl, productType, paymentIntentClientSecret, showPaymentForm])
+  }, [design.id, design.topic, design.imageUrl, productType, paymentIntentClientSecret, showPaymentForm, onWizardStepChange])
 
   useEffect(() => {
     const initializeCheckout = async () => {
@@ -150,6 +181,10 @@ export default function Checkout({
   const goBackToOrder = () => {
     setError(null)
     setShippingSubmitAttempted(false)
+    if (wizardMode) {
+      onWizardBack?.()
+      return
+    }
     setStep('order')
   }
 
@@ -157,6 +192,7 @@ export default function Checkout({
     setError(null)
     setShippingSubmitAttempted(false)
     setStep('shipping')
+    onWizardStepChange?.('shipping')
   }
 
   const goBackToShipping = () => {
@@ -166,6 +202,7 @@ export default function Checkout({
     setPaymentIntentClientSecret(null)
     setChargedTotal(null)
     setStep('shipping')
+    onWizardStepChange?.('shipping')
   }
 
   const handleCompleteOrder = async () => {
@@ -201,9 +238,11 @@ export default function Checkout({
           const totalFromServer = Number(data.amounts.totalCents || 0) / 100
           setEstimatedTax(taxFromServer)
           setChargedTotal(totalFromServer)
+          onTaxUpdate?.(taxFromServer, totalFromServer)
         }
         setPaymentIntentClientSecret(data.clientSecret)
         setStep('payment')
+        onWizardStepChange?.('payment')
       } else {
         setError(data.error || 'Could not initialize payment. Please try again.')
       }
@@ -263,6 +302,7 @@ export default function Checkout({
         setLoading(false)
         setSucceededPaymentIntentId(paymentIntentId)
         setStep('shipping')
+        onWizardStepChange?.('shipping')
         handlePaymentError(errorMsg)
         console.error('Fulfillment error:', errorMsg)
       }
@@ -282,134 +322,92 @@ export default function Checkout({
 
   const stepIndex = STEPS.findIndex((s) => s.id === step)
 
-  return (
-    <div
-      className={`flex flex-col rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-lg shadow-black/30 lg:h-full lg:min-h-0 ${className}`}
-    >
-      <div className="mb-1 flex items-center gap-2">
-        <span className="rounded-md bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-emerald-400">
-          Step 3
-        </span>
-      </div>
-      <h2 className="mb-1 shrink-0 text-lg font-semibold text-zinc-100">Checkout</h2>
-      <p className="mb-4 shrink-0 text-sm text-zinc-500">
-        Printed to order · Ships in 5–7 business days
-      </p>
+  const panelClass = embedded ? '' : 'rh-panel'
+  const primaryBtnClass = 'rh-btn-primary'
+  const secondaryBtnClass = 'rh-btn-secondary'
+  const sizeActiveClass = 'rh-toggle-active'
+  const sizeInactiveClass = 'rh-toggle-inactive'
+  const inputClass = 'rh-input'
 
-      {!isFulfillmentRetry && !paymentSuccess && (
-        <nav aria-label="Checkout steps" className="mb-6 shrink-0">
-          <ol className="flex items-center justify-center gap-2">
-            {STEPS.map((s, i) => {
-              const active = stepIndex === i
-              const done = stepIndex > i
-              return (
-                <li key={s.id} className="flex items-center">
-                  {i > 0 && <span className="mx-1 hidden text-zinc-700 sm:inline">—</span>}
-                  <span
-                    className={`rounded-full px-3 py-1 text-xs font-medium sm:text-sm ${
-                      active
-                        ? 'bg-emerald-500/15 text-emerald-300'
-                        : done
-                          ? 'text-zinc-400'
-                          : 'text-zinc-600'
-                    }`}
-                  >
-                    {s.label}
-                  </span>
-                </li>
-              )
-            })}
-          </ol>
-        </nav>
+  return (
+    <div className={`${panelClass} ${className}`.trim()}>
+      {!embedded && !wizardMode && <h2 className="text-base font-medium text-neutral-900">Checkout</h2>}
+
+      {!isFulfillmentRetry && !paymentSuccess && !wizardMode && (
+        <p className="mt-1 text-sm text-neutral-500">
+          Step {stepIndex + 1} of {STEPS.length}: {STEPS[stepIndex]?.label}
+        </p>
       )}
 
       {error && !isFulfillmentRetry && step !== 'payment' && (
-        <div className="mb-4 shrink-0 rounded-lg border border-rose-500/40 bg-rose-950/40 p-3">
-          <p className="text-sm text-rose-200">{error}</p>
+        <div className={`rounded-lg bg-red-50 px-3 py-2 ${embedded ? '' : 'mt-4'}`}>
+          <p className="text-sm text-red-700">{error}</p>
         </div>
       )}
 
-      <div className="flex min-w-0 flex-col lg:min-h-0 lg:flex-1">
-        {step === 'order' && !isFulfillmentRetry && (
+      <div className={embedded ? '' : 'mt-5'}>
+        {step === 'order' && !isFulfillmentRetry && !wizardMode && (
           <div className="space-y-5">
             <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-300">
-                {isMug ? 'Mug size' : 'Size'}
-              </label>
+              <label className="rh-label">{isMug ? 'Mug size' : 'Size'}</label>
               <div className={`grid gap-2 ${isMug ? 'grid-cols-3' : 'grid-cols-4'}`}>
                 {(isMug ? MUG_SIZES : SHIRT_SIZES).map((s) => (
                   <button
                     key={s}
                     type="button"
                     onClick={() => onOrderSizeChange(s)}
-                    className={`rounded-lg border-2 px-3 py-2 text-sm transition-colors ${
-                      orderSize === s
-                        ? 'border-emerald-500 bg-emerald-500/15 font-semibold text-emerald-300'
-                        : 'border-zinc-700 hover:border-zinc-500'
+                    className={`rounded-lg border px-3 py-2 text-sm transition ${
+                      orderSize === s ? sizeActiveClass : sizeInactiveClass
                     }`}
                   >
                     {s}
                   </button>
                 ))}
               </div>
-              {isMug && (
-                <p className="mt-2 text-xs text-zinc-500">White Glossy Mug · {orderSize}</p>
-              )}
             </div>
             <div>
-              <label className="mb-2 block text-sm font-medium text-zinc-300">Quantity</label>
-              <div className="flex items-center gap-4">
+              <label className="rh-label">Quantity</label>
+              <div className="flex items-center gap-3">
                 <button
                   type="button"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  onClick={() => onQuantityChange?.(Math.max(1, quantity - 1))}
                   disabled={quantity <= 1}
-                  className="h-10 w-10 rounded-lg border-2 border-zinc-600 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-9 w-9 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
                 >
                   −
                 </button>
-                <span className="w-12 text-center text-xl font-semibold text-white">{quantity}</span>
+                <span className="w-8 text-center">{quantity}</span>
                 <button
                   type="button"
-                  onClick={() => setQuantity(quantity + 1)}
+                  onClick={() => onQuantityChange?.(quantity + 1)}
                   disabled={quantity >= 10}
-                  className="h-10 w-10 rounded-lg border-2 border-zinc-600 transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
+                  className="h-9 w-9 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
                 >
                   +
                 </button>
               </div>
             </div>
-            <div className="border-t border-zinc-700 pt-4 text-sm text-zinc-300">
-              <div className="mb-1 flex justify-between">
-                <span className="text-zinc-500">Subtotal</span>
+            <div className="space-y-1 text-sm text-neutral-700">
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Subtotal</span>
                 <span>${subtotal.toFixed(2)}</span>
               </div>
-              <div className="mb-1 flex justify-between">
-                <span className="text-zinc-500">Shipping</span>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Shipping</span>
                 <span>${shippingCost.toFixed(2)}</span>
               </div>
-              <div className="mb-2 flex justify-between">
-                <span className="text-zinc-500">Estimated tax</span>
+              <div className="flex justify-between">
+                <span className="text-neutral-500">Tax</span>
                 <span>${estimatedTax.toFixed(2)}</span>
               </div>
-              <div className="flex justify-between border-t border-zinc-700 pt-2 text-lg font-bold text-emerald-400">
-                <span className="text-white">Total</span>
+              <div className="flex justify-between pt-2 text-base font-semibold text-neutral-900">
+                <span>Total</span>
                 <span>${totalPrice}</span>
               </div>
-              <p className="mt-2 text-[11px] text-zinc-500">Tax may vary slightly based on destination.</p>
             </div>
-            <button
-              type="button"
-              onClick={goToShipping}
-              className="w-full rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-3.5 font-semibold text-zinc-950 shadow-lg shadow-emerald-900/25"
-            >
-              Continue to shipping
+            <button type="button" onClick={goToShipping} className={primaryBtnClass}>
+              Continue
             </button>
-            <p className="text-center text-xs text-zinc-500">
-              Secure payment ·{' '}
-              <a href="/returns" className="text-zinc-400 underline-offset-2 hover:text-zinc-300 hover:underline">
-                Easy returns
-              </a>
-            </p>
           </div>
         )}
 
@@ -427,45 +425,32 @@ export default function Checkout({
             noValidate
           >
             {isFulfillmentRetry && (
-              <div className="mb-2 rounded-lg border border-amber-500/40 bg-amber-950/30 p-4">
-                <p className="text-sm text-amber-200">
-                  Payment was successful. Update your address if needed, then resubmit. You will not be charged again.
+              <div className="rounded-lg bg-amber-50 px-3 py-2">
+                <p className="text-sm text-amber-800">
+                  Payment succeeded. Update your address if needed, then resubmit. You will not be charged again.
                 </p>
               </div>
             )}
-            <div className="rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-xs text-zinc-300">
-              <p className="mb-2 text-zinc-500">
-                {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · Qty {quantity}
-              </p>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Items</span>
-                  <span>${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Shipping</span>
-                  <span>${shippingCost.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Estimated tax</span>
-                  <span>${estimatedTax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between border-t border-zinc-700 pt-1.5 font-semibold text-emerald-400">
-                  <span className="text-zinc-200">Total</span>
+            {!wizardMode && (
+              <div className="space-y-1 text-sm text-neutral-700">
+                <p className="text-neutral-500">
+                  {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · Qty {quantity}
+                </p>
+                <div className="flex justify-between font-medium text-neutral-900">
+                  <span>Total</span>
                   <span>${totalPrice}</span>
                 </div>
               </div>
-            </div>
-            <h3 className="text-sm font-semibold uppercase tracking-wide text-white">Shipping</h3>
-            <div className="grid grid-cols-2 gap-2 sm:gap-3">
+            )}
+            <div className="grid grid-cols-2 gap-2">
               <input
                 type="text"
                 name="shipping-name"
                 autoComplete="name"
-                placeholder="Full Name"
+                placeholder="Full name"
                 value={shippingInfo.name}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, name: e.target.value })}
-                className="rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white placeholder-zinc-500"
+                className={inputClass}
               />
               <input
                 type="email"
@@ -474,7 +459,7 @@ export default function Checkout({
                 placeholder="Email"
                 value={shippingInfo.email}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, email: e.target.value })}
-                className="rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white placeholder-zinc-500"
+                className={inputClass}
               />
               <input
                 type="text"
@@ -483,7 +468,7 @@ export default function Checkout({
                 placeholder="Address"
                 value={shippingInfo.address}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, address: e.target.value })}
-                className="col-span-2 rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white placeholder-zinc-500"
+                className={`col-span-2 ${inputClass}`}
               />
               <input
                 type="text"
@@ -492,16 +477,16 @@ export default function Checkout({
                 placeholder="City"
                 value={shippingInfo.city}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, city: e.target.value })}
-                className="rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white placeholder-zinc-500"
+                className={inputClass}
               />
               <input
                 type="text"
                 name="shipping-state"
                 autoComplete="address-level1"
-                placeholder="State (e.g. CA)"
+                placeholder="State"
                 value={shippingInfo.state}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, state: e.target.value })}
-                className="rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white placeholder-zinc-500"
+                className={inputClass}
               />
               <input
                 type="text"
@@ -510,14 +495,14 @@ export default function Checkout({
                 placeholder="ZIP"
                 value={shippingInfo.zip}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, zip: e.target.value })}
-                className="rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white placeholder-zinc-500"
+                className={inputClass}
               />
               <select
                 name="shipping-country"
                 autoComplete="country"
                 value={shippingInfo.country}
                 onChange={(e) => setShippingInfo({ ...shippingInfo, country: e.target.value })}
-                className="rounded-lg border border-zinc-600 bg-zinc-950 px-3 py-2.5 text-white"
+                className={inputClass}
               >
                 <option value="US">United States</option>
                 <option value="CA">Canada</option>
@@ -526,13 +511,13 @@ export default function Checkout({
               </select>
             </div>
             {shippingSubmitAttempted && !shippingValidation.valid && (
-              <p className="text-sm text-amber-200/90" role="status" aria-live="polite">
+              <p className="text-sm text-red-600" role="status" aria-live="polite">
                 {shippingValidation.error}
               </p>
             )}
             {error && isFulfillmentRetry && (
-              <div className="rounded-lg border border-rose-500/40 bg-rose-950/40 p-3">
-                <p className="text-sm text-rose-200">{error}</p>
+              <div className="rounded-lg bg-red-50 px-3 py-2">
+                <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
             {isFulfillmentRetry && succeededPaymentIntentId ? (
@@ -546,25 +531,19 @@ export default function Checkout({
                   void handlePaymentSuccess(succeededPaymentIntentId, shippingInfo)
                 }}
                 disabled={loading}
-                className="w-full rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 px-6 py-4 font-bold text-zinc-950 shadow-md transition hover:shadow-emerald-500/25 disabled:cursor-not-allowed disabled:opacity-50"
+                className={primaryBtnClass}
               >
-                {loading ? 'Submitting…' : 'Submit corrected address'}
+                {loading ? 'Submitting…' : 'Submit address'}
               </button>
             ) : (
-              <div className="flex flex-col gap-2 sm:flex-row sm:gap-3">
-                <button
-                  type="submit"
-                  disabled={loading}
-                  className="order-1 w-full flex-1 rounded-lg bg-gradient-to-r from-emerald-600 via-lime-500 to-emerald-600 py-3.5 font-black uppercase tracking-wide text-zinc-950 shadow-lg disabled:cursor-not-allowed disabled:opacity-50 sm:order-2"
-                >
+              <div className="flex flex-col gap-2 sm:flex-row">
+                {!wizardMode && (
+                  <button type="button" onClick={goBackToOrder} className={`${secondaryBtnClass} sm:w-auto sm:px-6`}>
+                    Back
+                  </button>
+                )}
+                <button type="submit" disabled={loading} className={primaryBtnClass}>
                   {loading ? '…' : 'Continue to payment'}
-                </button>
-                <button
-                  type="button"
-                  onClick={goBackToOrder}
-                  className="order-2 w-full rounded-lg border border-zinc-600 py-3 font-semibold text-zinc-200 transition hover:bg-zinc-800 sm:order-1 sm:w-auto sm:px-6"
-                >
-                  Back
                 </button>
               </div>
             )}
@@ -573,32 +552,20 @@ export default function Checkout({
 
         {step === 'payment' && showPaymentForm && !isFulfillmentRetry && !paymentSuccess && (
           <div className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
-            <div className="rounded-lg border border-zinc-700 bg-zinc-950/50 p-3 text-xs text-zinc-300">
-              <p className="mb-2 text-zinc-500">
-                {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · {shippingInfo.city || '…'}
-              </p>
-              <div className="space-y-1">
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Items</span>
-                  <span>${subtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Shipping</span>
-                  <span>${shippingCost.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-zinc-500">Estimated tax</span>
-                  <span>${estimatedTax.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between border-t border-zinc-700 pt-1.5 font-semibold text-emerald-400">
-                  <span className="text-zinc-200">Total</span>
+            {!wizardMode && (
+              <div className="space-y-1 text-sm text-neutral-700">
+                <p className="text-neutral-500">
+                  {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · {shippingInfo.city || '…'}
+                </p>
+                <div className="flex justify-between font-medium text-neutral-900">
+                  <span>Total</span>
                   <span>${totalPrice}</span>
                 </div>
               </div>
-            </div>
+            )}
             {error && (
-              <div className="rounded-lg border border-rose-500/50 bg-rose-950/40 p-3">
-                <p className="text-sm text-rose-200">{error}</p>
+              <div className="rounded-lg bg-red-50 px-3 py-2">
+                <p className="text-sm text-red-700">{error}</p>
               </div>
             )}
             {showPaymentForm && !succeededPaymentIntentId && (
@@ -609,12 +576,12 @@ export default function Checkout({
                     options={{
                       clientSecret: paymentIntentClientSecret,
                       appearance: {
-                        theme: 'night',
+                        theme: 'stripe',
                         variables: {
-                          colorPrimary: '#34d399',
-                          colorBackground: '#18181b',
-                          colorText: '#fafafa',
-                          colorDanger: '#f87171',
+                          colorPrimary: '#171717',
+                          colorBackground: '#ffffff',
+                          colorText: '#171717',
+                          colorDanger: '#DC2626',
                           borderRadius: '8px',
                         },
                       },
@@ -639,10 +606,10 @@ export default function Checkout({
                     />
                   </Elements>
                 ) : (
-                  <div className="mb-2 rounded-lg border border-zinc-700 bg-zinc-900/60 p-4">
+                  <div className="rounded-lg bg-white px-3 py-4">
                     <div className="flex items-center gap-3">
                       <svg
-                        className="h-4 w-4 animate-spin text-emerald-400"
+                        className="h-4 w-4 animate-spin text-neutral-700"
                         xmlns="http://www.w3.org/2000/svg"
                         fill="none"
                         viewBox="0 0 24 24"
@@ -655,35 +622,26 @@ export default function Checkout({
                           d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
                         />
                       </svg>
-                      <p className="text-sm text-zinc-300">
-                        {loading
-                          ? 'Preparing secure payment…'
-                          : !paymentIntentClientSecret && !error
-                            ? 'Loading payment form…'
-                            : 'Loading payment form…'}
-                      </p>
+                      <p className="text-sm text-neutral-500">Loading payment…</p>
                     </div>
                     {!stripePromise && (
-                      <p className="mt-2 text-xs text-amber-300/90">Stripe is not configured in this environment.</p>
+                      <p className="mt-2 text-sm text-neutral-400">Stripe is not configured in this environment.</p>
                     )}
                   </div>
                 )}
               </>
             )}
-            <button
-              type="button"
-              onClick={goBackToShipping}
-              disabled={loading}
-              className="w-full rounded-lg border border-zinc-600 py-3 font-semibold text-zinc-200 transition hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              Back
-            </button>
+            {!wizardMode && (
+              <button type="button" onClick={goBackToShipping} disabled={loading} className={secondaryBtnClass}>
+                Back
+              </button>
+            )}
           </div>
         )}
 
         {paymentSuccess && (
-          <div className="rounded-lg border border-emerald-500/40 bg-emerald-950/30 p-4 text-center text-sm font-semibold text-emerald-200">
-            Payment successful! Processing your order…
+          <div className="rounded-lg bg-white px-3 py-4 text-center text-sm text-neutral-700">
+            Payment successful. Processing your order…
           </div>
         )}
       </div>

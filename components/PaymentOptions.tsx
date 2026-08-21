@@ -220,8 +220,8 @@ export default function PaymentOptions({
 
       {!probing && canMakePayment && (
         <div className="relative py-1">
-          <div className="h-px w-full bg-zinc-700" />
-          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-zinc-900 px-3 text-xs font-semibold uppercase tracking-wide text-zinc-500">
+          <div className="h-px w-full bg-neutral-200" />
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-background px-3 text-xs text-neutral-400">
             Or pay with card
           </span>
         </div>
