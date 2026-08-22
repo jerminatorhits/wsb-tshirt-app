@@ -36,13 +36,14 @@ function InstantMugPreview({ imageUrl }: { imageUrl: string }) {
   )
 }
 
-function PreviewBusyBadge({ label }: { label: string }) {
+function PreviewSpinner() {
   return (
-    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-10 flex justify-center">
-      <div className="flex items-center gap-2 rounded-full bg-white/95 px-3 py-1.5 text-xs text-neutral-600 shadow-sm ring-1 ring-neutral-200/80">
-        <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-800" />
-        {label}
-      </div>
+    <div
+      className="absolute inset-0 flex items-center justify-center"
+      role="status"
+      aria-label="Loading preview"
+    >
+      <span className="h-6 w-6 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-800" />
     </div>
   )
 }
@@ -97,15 +98,14 @@ export default function TShirtPreview({
     const fetchBlankShirt = async () => {
       const cacheKey = selectedColor.value
       const cached = shirtBlankCache.get(cacheKey)
+      setPreviewReady(false)
+      setBlankError(null)
       if (cached) {
         setBlankShirtUrl(cached)
-        setBlankError(null)
         return
       }
 
-      setBlankError(null)
       setBlankShirtUrl(null)
-      setPreviewReady(false)
       try {
         const params = new URLSearchParams({ product: productType, color: selectedColor.value })
         const response = await fetch(`/api/blank-product?${params.toString()}`)
@@ -230,20 +230,11 @@ export default function TShirtPreview({
                 ref={canvasRef}
                 className={`absolute inset-0 h-full w-full ${previewReady && !previewError ? 'opacity-100' : 'opacity-0'}`}
               />
-              {(!previewReady || previewError) && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <div
-                    className="h-[90%] w-[72%] rounded-b-xl rounded-t-[46%] shadow-sm"
-                    style={{ backgroundColor: selectedColor.hex }}
-                    aria-hidden
-                  />
-                </div>
-              )}
-              {!previewReady && !previewError && !blankError && (
-                <PreviewBusyBadge label="Loading shirt photo…" />
-              )}
-              {blankError && !previewReady && (
-                <p className="absolute bottom-3 text-center text-xs text-neutral-500">{blankError}</p>
+              {!previewReady && !previewError && !blankError && <PreviewSpinner />}
+              {(previewError || blankError) && !previewReady && (
+                <p className="absolute inset-x-3 bottom-3 text-center text-xs text-neutral-500">
+                  {blankError || previewError}
+                </p>
               )}
             </div>
           )}
