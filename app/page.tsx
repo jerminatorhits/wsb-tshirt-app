@@ -3,6 +3,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import TShirtPreview from '@/components/TShirtPreview'
 import Checkout from '@/components/Checkout'
+import {
+  buildDropShareUrl,
+  dropShareText,
+  saveDropShareForCheckout,
+} from '@/lib/drop-share'
 import { COLORS, type ColorOption, type GeneratedDesign } from '@/lib/merch'
 import {
   DESIGN_LAYOUT_OPTIONS,
@@ -13,6 +18,11 @@ import {
   type DesignLayoutPreset,
 } from '@/lib/text-design'
 import { getProductPricing, MUG_BASE_PRICE, SHIRT_BASE_PRICE, SHIRT_SIZES, parseProductType, type ProductType } from '@/lib/products'
+
+/** Featured drop shown when someone lands with no share link — always a buyable preview. */
+const FEATURED_DROP = { ticker: 'TSLA', price: '500' } as const
+
+const QUICK_TICKERS = ['TSLA', 'NVDA', 'GME', 'PLTR', 'HOOD', 'AAPL'] as const
 
 interface TickerSearchResult {
   symbol: string
@@ -55,8 +65,8 @@ function filterTickerResults(query: string, items: TickerSearchResult[]) {
 type AppStep = 'create' | 'shipping' | 'payment'
 
 export default function Home() {
-  const [ticker, setTicker] = useState('')
-  const [numberValue, setNumberValue] = useState('')
+  const [ticker, setTicker] = useState<string>(FEATURED_DROP.ticker)
+  const [numberValue, setNumberValue] = useState<string>(FEATURED_DROP.price)
   const [expressionMode, setExpressionMode] = useState<'price' | 'option'>('price')
   const [optionType, setOptionType] = useState<'CALL' | 'PUT'>('CALL')
   const [expirationDates, setExpirationDates] = useState<number[]>([])
@@ -112,10 +122,17 @@ export default function Home() {
     const qLayout = parseDesignLayoutPreset(params.get('layout'))
     const qScale = params.get('scale')
     const qInk = params.get('ink')
-    const qProduct = parseProductType(params.get('product'))
+    const qProductParam = params.get('product')
+    const qProduct = qProductParam ? parseProductType(qProductParam) : 'mug'
 
     if (qTicker) {
       setTicker(qTicker.toUpperCase().slice(0, 6))
+      setTickerPrefilledFromUrl(true)
+    } else {
+      // Land on a live drop so the mockup is never empty.
+      setTicker(FEATURED_DROP.ticker)
+      setNumberValue(FEATURED_DROP.price)
+      setExpressionMode('price')
       setTickerPrefilledFromUrl(true)
     }
     if (qMode === 'option' || qMode === 'price') setExpressionMode(qMode)
@@ -369,16 +386,50 @@ export default function Home() {
     const parsed = parseDesignForm()
     if (!parsed.ok) {
       setDesignGenerating(false)
+      setGeneratedDesign(null)
       return
     }
 
     const seq = ++designRefreshSeqRef.current
     setDesignGenerating(true)
-    const timeout = window.setTimeout(() => {
-      void (async () => {
-        try {
-          await ensureDesignFontsLoaded()
-          const imageUrl = renderDesignToDataURL({
+
+    const applyDesign = (imageUrl: string) => {
+      if (seq !== designRefreshSeqRef.current) return
+      const prompt = buildPromptFromParsed(parsed)
+      setGeneratedDesign((prev) => ({
+        id: prev?.id ?? `text-design-${Date.now()}`,
+        topic: parsed.titleParts.join(' '),
+        imageUrl,
+        prompt,
+        createdAt: prev?.createdAt ?? new Date().toISOString(),
+      }))
+      setErrorMessage(null)
+      setDesignGenerating(false)
+    }
+
+    // Paint immediately with system fonts, then refresh once webfonts are ready.
+    try {
+      applyDesign(
+        renderDesignToDataURL({
+          tickerText: parsed.tickerText,
+          primaryText: parsed.primaryText,
+          optionsText: parsed.optionsText,
+          preset: designLayoutPreset,
+          scale: designScale,
+          useLightInk: effectiveLightInk,
+          expressionMode,
+        })
+      )
+    } catch (e) {
+      console.error('Failed to render design preview:', e)
+      if (seq === designRefreshSeqRef.current) setDesignGenerating(false)
+    }
+
+    void ensureDesignFontsLoaded().then(() => {
+      if (seq !== designRefreshSeqRef.current) return
+      try {
+        applyDesign(
+          renderDesignToDataURL({
             tickerText: parsed.tickerText,
             primaryText: parsed.primaryText,
             optionsText: parsed.optionsText,
@@ -387,29 +438,11 @@ export default function Home() {
             useLightInk: effectiveLightInk,
             expressionMode,
           })
-          if (seq !== designRefreshSeqRef.current) return
-          const prompt = buildPromptFromParsed(parsed)
-          setGeneratedDesign((prev) => ({
-            id: prev?.id ?? `text-design-${Date.now()}`,
-            topic: parsed.titleParts.join(' '),
-            imageUrl,
-            prompt,
-            createdAt: prev?.createdAt ?? new Date().toISOString(),
-          }))
-          setErrorMessage(null)
-        } catch (e) {
-          if (seq === designRefreshSeqRef.current) {
-            console.error('Failed to refresh design preview:', e)
-          }
-        } finally {
-          if (seq === designRefreshSeqRef.current) {
-            setDesignGenerating(false)
-          }
-        }
-      })()
-    }, 80)
-
-    return () => window.clearTimeout(timeout)
+        )
+      } catch (e) {
+        console.error('Failed to refresh design fonts:', e)
+      }
+    })
   }, [
     designLayoutPreset,
     designScale,
@@ -426,6 +459,20 @@ export default function Home() {
   ])
   /* eslint-enable react-hooks/exhaustive-deps */
 
+  const getDropShareInput = () => ({
+    ticker: cleanedTicker,
+    expressionMode,
+    numberValue,
+    optionType,
+    selectedExpiration,
+    selectedStrike,
+    colorValue: selectedColor.value,
+    layout: designLayoutPreset,
+    scale: designScale,
+    inkMode: designInkMode,
+    productType,
+  })
+
   const handleCheckout = () => {
     const parsed = parseDesignForm()
     if (!parsed.ok) {
@@ -436,36 +483,50 @@ export default function Home() {
       setErrorMessage('Preview is still loading. Try again in a moment.')
       return
     }
+    if (typeof window !== 'undefined') {
+      const shareUrl = buildDropShareUrl(
+        window.location.origin,
+        window.location.pathname,
+        getDropShareInput()
+      )
+      saveDropShareForCheckout({
+        url: shareUrl,
+        topic: generatedDesign.topic,
+        productLabel: productType === 'mug' ? 'Mug' : 'Tee',
+      })
+    }
     setErrorMessage(null)
     goToStep('shipping')
   }
 
-  const handleCopyShareLink = async () => {
+  const handleShareDrop = async () => {
     if (typeof window === 'undefined') return
 
-    const params = new URLSearchParams()
-    if (cleanedTicker) params.set('t', cleanedTicker)
-    params.set('mode', expressionMode)
-    if (expressionMode === 'price') {
-      if (numberValue.trim()) params.set('p', numberValue.trim())
-    } else {
-      params.set('ot', optionType)
-      if (selectedExpiration) params.set('exp', selectedExpiration)
-      if (selectedStrike) params.set('strike', selectedStrike)
-    }
-    if (selectedColor.value) params.set('color', selectedColor.value)
-    params.set('layout', designLayoutPreset)
-    params.set('scale', String(designScale))
-    params.set('ink', designInkMode)
-    params.set('product', productType)
-
-    const shareUrl = `${window.location.origin}${window.location.pathname}?${params.toString()}`
+    const shareUrl = buildDropShareUrl(
+      window.location.origin,
+      window.location.pathname,
+      getDropShareInput()
+    )
+    const topic = generatedDesign?.topic || cleanedTicker || 'my drop'
+    const text = dropShareText(topic, shareUrl)
 
     try {
-      await navigator.clipboard.writeText(shareUrl)
-      setShareStatus('Link copied')
-    } catch {
-      setShareStatus('Could not copy link')
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: 'WSB Shirt Lab', text, url: shareUrl })
+        setShareStatus('Shared')
+      } else {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('Link copied')
+      }
+    } catch (e: unknown) {
+      const err = e as { name?: string }
+      if (err?.name === 'AbortError') return
+      try {
+        await navigator.clipboard.writeText(shareUrl)
+        setShareStatus('Link copied')
+      } catch {
+        setShareStatus('Could not share')
+      }
     } finally {
       window.setTimeout(() => setShareStatus(null), 2200)
     }
@@ -487,21 +548,62 @@ export default function Home() {
       >
         {step === 'create' && (
           <>
-            <div className="flex shrink-0 items-end justify-between gap-3">
-              <div>
+            <div className="flex shrink-0 items-start justify-between gap-3">
+              <div className="min-w-0">
                 <h1 className="text-xl font-semibold tracking-tight text-neutral-900 sm:text-2xl">
-                  Your ticker, on merch.
+                  Put your conviction on merch.
                 </h1>
                 <p className="mt-0.5 text-sm text-neutral-500">
-                  Pick a product, enter a ticker, checkout.
+                  Preview live · print to order · share the drop
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => void handleShareDrop()}
+                className="shrink-0 rounded-full border border-neutral-200 bg-white px-3 py-1.5 text-xs font-medium text-neutral-600 hover:border-neutral-400 hover:text-neutral-900"
+              >
+                {shareStatus || 'Share'}
+              </button>
             </div>
 
             {errorMessage && <p className="mt-2 shrink-0 text-xs text-red-600">{errorMessage}</p>}
 
-            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
-              <div className="flex w-full shrink-0 flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
+            <div className="mt-2 flex min-h-0 flex-1 flex-col gap-2.5">
+              {/* Mockup first — the product is the visual, not the form */}
+              <div className="relative min-h-[240px] min-w-0 flex-[1.6] overflow-hidden rounded-2xl border border-neutral-200 bg-white sm:min-h-[280px]">
+                {generatedDesign ? (
+                  <TShirtPreview
+                    key={productType}
+                    embedded
+                    className="h-full w-full"
+                    design={generatedDesign}
+                    topic={generatedDesign.topic}
+                    productType={productType}
+                    orderSize={orderSize}
+                    onOrderSizeChange={setOrderSize}
+                    selectedColor={selectedColor}
+                    onColorChange={setSelectedColor}
+                    printLayoutControls={{
+                      preset: designLayoutPreset,
+                      onPresetChange: setDesignLayoutPreset,
+                      scale: designScale,
+                      onScaleChange: setDesignScale,
+                      inkMode: designInkMode,
+                      onInkModeChange: setDesignInkMode,
+                      advancedOpen: designAdvancedOpen,
+                      onAdvancedOpenChange: setDesignAdvancedOpen,
+                    }}
+                  />
+                ) : (
+                  <div className="flex h-full min-h-[200px] flex-col items-center justify-center px-6 text-center">
+                    <p className="text-sm text-neutral-500">
+                      {designGenerating ? 'Building preview…' : 'Enter a ticker to preview'}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              <div className="flex w-full shrink-0 flex-col gap-2 rounded-2xl border border-neutral-200 bg-white p-2.5 sm:p-3">
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -522,72 +624,82 @@ export default function Home() {
                 </div>
 
                 {productType !== 'mug' && (
-                  <div className="space-y-2">
-                    <div>
-                      <label className="rh-label-compact">Size</label>
-                      <div className="grid grid-cols-7 gap-1">
-                        {SHIRT_SIZES.map((s) => (
-                          <button
-                            key={s}
-                            type="button"
-                            onClick={() => setOrderSize(s)}
-                            className={`${compactToggle(orderSize === s)} px-0.5 text-[11px] sm:text-sm`}
-                          >
-                            {s}
-                          </button>
-                        ))}
-                      </div>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5">
+                    <div className="flex flex-wrap gap-1">
+                      {SHIRT_SIZES.map((s) => (
+                        <button
+                          key={s}
+                          type="button"
+                          onClick={() => setOrderSize(s)}
+                          className={`${compactToggle(orderSize === s)} min-w-[2rem] px-1.5 py-1 text-[11px]`}
+                        >
+                          {s}
+                        </button>
+                      ))}
                     </div>
-                    <div className="flex items-center gap-2">
-                      <span className="rh-label-compact mb-0">Color</span>
-                      <div className="flex gap-1.5">
-                        {COLORS.map((c) => (
-                          <button
-                            key={c.value}
-                            type="button"
-                            onClick={() => setSelectedColor(c)}
-                            className={`h-7 w-7 rounded-full border transition ${
-                              selectedColor.value === c.value
-                                ? 'border-neutral-900 ring-2 ring-neutral-900/20'
-                                : 'border-neutral-300 hover:border-neutral-400'
-                            }`}
-                            style={{ backgroundColor: c.hex }}
-                            title={c.name}
-                            aria-label={c.name}
-                          />
-                        ))}
-                      </div>
+                    <div className="flex gap-1.5">
+                      {COLORS.map((c) => (
+                        <button
+                          key={c.value}
+                          type="button"
+                          onClick={() => setSelectedColor(c)}
+                          className={`h-6 w-6 rounded-full border transition ${
+                            selectedColor.value === c.value
+                              ? 'border-neutral-900 ring-2 ring-neutral-900/20'
+                              : 'border-neutral-300 hover:border-neutral-400'
+                          }`}
+                          style={{ backgroundColor: c.hex }}
+                          title={c.name}
+                          aria-label={c.name}
+                        />
+                      ))}
                     </div>
                   </div>
                 )}
 
-                <div>
-                  <label className="rh-label-compact">Print</label>
-                  <div className="grid grid-cols-2 gap-2">
+                <div className="flex gap-1 overflow-x-auto pb-0.5 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {QUICK_TICKERS.map((sym) => (
                     <button
+                      key={sym}
                       type="button"
-                      aria-pressed={expressionMode === 'price'}
-                      onClick={() => setExpressionMode('price')}
-                      className={compactToggle(expressionMode === 'price')}
+                      onClick={() => {
+                        setTickerPrefilledFromUrl(true)
+                        setTicker(sym)
+                        setTickerSuggestions([])
+                        setTickerMenuOpen(false)
+                        if (expressionMode === 'price' && !numberValue.trim()) {
+                          setNumberValue(FEATURED_DROP.price)
+                        }
+                      }}
+                      className={`shrink-0 rounded-full border px-2.5 py-1 text-xs font-medium transition ${
+                        cleanedTicker === sym
+                          ? 'border-neutral-900 bg-neutral-900 text-white'
+                          : 'border-neutral-200 bg-white text-neutral-600 hover:border-neutral-400'
+                      }`}
                     >
-                      Price
+                      ${sym}
                     </button>
-                    <button
-                      type="button"
-                      aria-pressed={expressionMode === 'option'}
-                      onClick={() => setExpressionMode('option')}
-                      className={compactToggle(expressionMode === 'option')}
-                    >
-                      Option
-                    </button>
-                  </div>
+                  ))}
                 </div>
 
-                <div
-                  className={`relative z-30 grid gap-2 ${
-                    expressionMode === 'price' ? 'grid-cols-2' : 'grid-cols-4'
-                  }`}
-                >
+                <div className="grid grid-cols-[4.5rem_1fr] gap-2">
+                  <div>
+                    <label className="rh-label-compact">Print</label>
+                    <select
+                      value={expressionMode}
+                      onChange={(e) => setExpressionMode(e.target.value === 'option' ? 'option' : 'price')}
+                      className="rh-input-compact"
+                      aria-label="Print type"
+                    >
+                      <option value="price">Price</option>
+                      <option value="option">Option</option>
+                    </select>
+                  </div>
+                  <div
+                    className={`relative z-30 grid gap-2 ${
+                      expressionMode === 'price' ? 'grid-cols-2' : 'grid-cols-3'
+                    }`}
+                  >
                   <div className="relative">
                     <label className="rh-label-compact" htmlFor="ticker">
                       Ticker
@@ -705,7 +817,7 @@ export default function Home() {
                           )}
                         </select>
                       </div>
-                      <div>
+                      <div className="col-span-3 sm:col-span-1">
                         <label className="rh-label-compact" htmlFor="strike">
                           Strike
                         </label>
@@ -730,87 +842,53 @@ export default function Home() {
                       </div>
                     </>
                   )}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => void handleCopyShareLink()}
-                  className="self-start text-xs text-neutral-400 hover:text-neutral-700"
-                >
-                  {shareStatus || 'Copy link'}
-                </button>
-              </div>
-
-              <div className="min-h-0 min-w-0 flex-1">
-                {generatedDesign ? (
-                  <TShirtPreview
-                    key={productType}
-                    embedded
-                    className="h-full w-full"
-                    design={generatedDesign}
-                    topic={generatedDesign.topic}
-                    productType={productType}
-                    orderSize={orderSize}
-                    onOrderSizeChange={setOrderSize}
-                    selectedColor={selectedColor}
-                    onColorChange={setSelectedColor}
-                    printLayoutControls={{
-                      preset: designLayoutPreset,
-                      onPresetChange: setDesignLayoutPreset,
-                      scale: designScale,
-                      onScaleChange: setDesignScale,
-                      inkMode: designInkMode,
-                      onInkModeChange: setDesignInkMode,
-                      advancedOpen: designAdvancedOpen,
-                      onAdvancedOpenChange: setDesignAdvancedOpen,
-                    }}
-                  />
-                ) : (
-                  <div className="flex h-full min-h-[220px] flex-col items-center justify-center px-6 text-center">
-                    <p className="text-sm text-neutral-500">
-                      {designGenerating ? 'Building preview…' : 'Enter a ticker and price to preview'}
-                    </p>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
-            <div className="mt-2 flex shrink-0 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
-              <div className="flex items-center gap-1.5">
+            <div className="mt-2 flex shrink-0 flex-col gap-1.5">
+              <div className="flex items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                    disabled={quantity <= 1}
+                    className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+                    aria-label="Decrease quantity"
+                  >
+                    −
+                  </button>
+                  <span className="w-6 text-center text-sm tabular-nums">{quantity}</span>
+                  <button
+                    type="button"
+                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                    disabled={quantity >= 10}
+                    className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+                    aria-label="Increase quantity"
+                  >
+                    +
+                  </button>
+                </div>
+                <div className="min-w-0 flex-1 text-right">
+                  <p className="text-lg font-semibold tabular-nums leading-tight">${orderTotalPreview}</p>
+                  <p className="truncate text-[11px] leading-tight text-neutral-500">
+                    ${orderSubtotal.toFixed(2)} + ${shippingFlatRate.toFixed(2)} ship
+                    {checkoutTax > 0 ? ` + $${checkoutTax.toFixed(2)} tax` : ''}
+                  </p>
+                </div>
                 <button
                   type="button"
-                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                  disabled={quantity <= 1}
-                  className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
-                  aria-label="Decrease quantity"
+                  onClick={handleCheckout}
+                  disabled={!canCheckout}
+                  className="rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
                 >
-                  −
-                </button>
-                <span className="w-6 text-center text-sm tabular-nums">{quantity}</span>
-                <button
-                  type="button"
-                  onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                  disabled={quantity >= 10}
-                  className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
-                  aria-label="Increase quantity"
-                >
-                  +
+                  {designGenerating && !generatedDesign ? '…' : 'Buy'}
                 </button>
               </div>
-              <div className="min-w-0 flex-1 text-right">
-                <p className="text-lg font-semibold tabular-nums leading-tight">${orderTotalPreview}</p>
-                <p className="truncate text-[11px] leading-tight text-neutral-500">
-                  ${orderSubtotal.toFixed(2)} + ${shippingFlatRate.toFixed(2)} shipping
-                  {checkoutTax > 0 ? ` + $${checkoutTax.toFixed(2)} tax` : ''}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={handleCheckout}
-                disabled={!canCheckout}
-                className="rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
-              >
-                {designGenerating && !generatedDesign ? '…' : 'Checkout'}
-              </button>
+              <p className="px-1 text-center text-[11px] text-neutral-400">
+                Gift it — ship to a friend at checkout. Printed after you pay.
+              </p>
             </div>
           </>
         )}

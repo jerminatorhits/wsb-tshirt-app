@@ -5,7 +5,7 @@ import './globals.css'
 
 export const metadata: Metadata = {
   title: 'WSB Shirt Lab',
-  description: 'Put your ticker on a mug or tee. Printed to order.',
+  description: 'Put your ticker conviction on a tee or mug. Live preview, print to order, share the drop.',
 }
 
 export default function RootLayout({

@@ -3,6 +3,7 @@
 import confetti from 'canvas-confetti'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import { dropShareText, loadDropShareAfterOrder, type DropSharePayload } from '@/lib/drop-share'
 
 /** Richer on dark backgrounds (default for this page’s `dark:` card/background). */
 const CONFETTI_COLORS_DARK = ['#22c55e', '#84cc16', '#34d399', '#f43f5e', '#eab308']
@@ -61,11 +62,15 @@ function OrderSuccessContent() {
   const [error, setError] = useState<string | null>(null)
   const [fulfillmentStatus, setFulfillmentStatus] = useState<'pending' | 'fulfilled' | 'unknown'>('unknown')
   const [orderId, setOrderId] = useState<string | null>(null)
+  const [dropShare, setDropShare] = useState<DropSharePayload | null>(null)
+  const [shareStatus, setShareStatus] = useState<string | null>(null)
+
+  useEffect(() => {
+    setDropShare(loadDropShareAfterOrder())
+  }, [])
 
   useEffect(() => {
     if (paymentIntentId) {
-      // Verify payment was successful
-      // Fulfillment runs from the Stripe webhook after payment; this page only verifies status.
       fetch('/api/verify-payment', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -78,15 +83,11 @@ function OrderSuccessContent() {
             setFulfillmentStatus(data.fulfillmentStatus === 'fulfilled' ? 'fulfilled' : 'pending')
             if (data.printfulOrderId) setOrderId(data.printfulOrderId)
           } else {
-            // Payment verification failed, but payment might still be valid
-            // Show success anyway since we have a payment intent ID
             setSuccess(true)
             setFulfillmentStatus('unknown')
           }
         })
         .catch((err) => {
-          // Even if verification fails, if we have a payment intent ID, payment likely succeeded
-          // Show success message
           setSuccess(true)
           console.error('Verification error:', err)
         })
@@ -101,7 +102,6 @@ function OrderSuccessContent() {
 
   const CELEBRATION_TOTAL_MS = 4000
   const FADE_MS = 400
-  /** Let the success check + copy paint first (perceived sync with the “Order confirmed” moment). */
   const CELEBRATION_START_DELAY_MS = 90
 
   useEffect(() => {
@@ -157,6 +157,31 @@ function OrderSuccessContent() {
     }
   }, [fulfilling, success])
 
+  const handleFlexDrop = async () => {
+    if (!dropShare) return
+    const text = dropShareText(dropShare.topic, dropShare.url)
+    try {
+      if (typeof navigator.share === 'function') {
+        await navigator.share({ title: 'WSB Shirt Lab', text, url: dropShare.url })
+        setShareStatus('Shared')
+      } else {
+        await navigator.clipboard.writeText(dropShare.url)
+        setShareStatus('Link copied')
+      }
+    } catch (e: unknown) {
+      const err = e as { name?: string }
+      if (err?.name === 'AbortError') return
+      try {
+        await navigator.clipboard.writeText(dropShare.url)
+        setShareStatus('Link copied')
+      } catch {
+        setShareStatus('Could not share')
+      }
+    } finally {
+      window.setTimeout(() => setShareStatus(null), 2200)
+    }
+  }
+
   return (
     <main className="flex items-center justify-center px-4 py-16">
       <div className="w-full max-w-md text-center">
@@ -168,19 +193,43 @@ function OrderSuccessContent() {
           </>
         ) : success ? (
           <>
-            <h1 className="text-2xl font-semibold text-neutral-900">Order confirmed</h1>
+            <h1 className="text-2xl font-semibold text-neutral-900">Order filled</h1>
             <p className="mt-2 text-sm text-neutral-500">
               Your merch is in production. A confirmation email is on the way.
             </p>
+            {dropShare && (
+              <p className="mt-3 text-sm font-medium text-neutral-700">
+                {dropShare.topic}
+                <span className="font-normal text-neutral-400"> · {dropShare.productLabel}</span>
+              </p>
+            )}
             {fulfillmentStatus !== 'unknown' && (
               <p className="mt-4 text-sm text-neutral-400">
                 {fulfillmentStatus === 'fulfilled' ? 'Fulfilled' : 'Processing'}
               </p>
             )}
             {orderId && <p className="mt-1 text-xs text-neutral-400">Order ID: {orderId}</p>}
-            <a href="/" className="rh-btn-primary mt-6 inline-block w-auto px-6">
-              Make another
-            </a>
+            <div className="mt-6 flex flex-col items-center gap-2">
+              {dropShare && (
+                <button
+                  type="button"
+                  onClick={() => void handleFlexDrop()}
+                  className="rh-btn-primary w-auto px-6"
+                >
+                  {shareStatus || 'Flex this drop'}
+                </button>
+              )}
+              <a
+                href={dropShare?.url || '/'}
+                className={
+                  dropShare
+                    ? 'text-sm text-neutral-500 hover:text-neutral-900'
+                    : 'rh-btn-primary inline-block w-auto px-6'
+                }
+              >
+                Make another
+              </a>
+            </div>
           </>
         ) : (
           <>
@@ -204,13 +253,14 @@ function OrderSuccessContent() {
 
 export default function OrderSuccessPage() {
   return (
-    <Suspense fallback={
-      <main className="flex items-center justify-center px-4 py-16">
-        <p className="text-sm text-neutral-400">Loading…</p>
-      </main>
-    }>
+    <Suspense
+      fallback={
+        <main className="flex items-center justify-center px-4 py-16">
+          <p className="text-sm text-neutral-400">Loading…</p>
+        </main>
+      }
+    >
       <OrderSuccessContent />
     </Suspense>
   )
 }
-

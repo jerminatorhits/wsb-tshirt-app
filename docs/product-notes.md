@@ -2,11 +2,26 @@
 
 Private reminders for positioning and messaging—not a spec or roadmap unless noted.
 
+## Merch drops (primary wedge)
+
+**Idea:** Not a catalog store and not generic dropshipping. Run **timed conviction drops**: ticker/option joke → live mockup → pay → Printful ships. ChatGPT can’t own the buy button.
+
+**Shipped UX (drop pass):**
+- Mockup-first create flow
+- Featured TSLA/$500 landing when no share link
+- Mug default for instant preview; tee one tap away
+- Quick ticker chips + Share (Web Share / copy link)
+- Post-order “Flex this drop” using `lib/drop-share.ts` + sessionStorage
+- Gift line under Buy CTA
+- Sync design render so preview never stays blank waiting on fonts
+
+**Ops:** One moment at a time. Post the mockup image + share URL where the joke already lives. Goal: 5 organic paid orders before ads.
+
 ## Gift / social angle (keep in mind)
 
 **Idea:** Lean into the **gift-giving** market, not only self-purchase. A friend can buy a shirt **for** a friend who shared an inspiring trade (celebration, inside joke, “you actually printed” energy).
 
-**Status:** No extra product implementation committed yet. Treat this as a **marketing / copy / positioning** thread to revisit (site copy, ads, packaging inserts, holiday pushes, etc.).
+**Status:** Soft copy under Buy CTA; shipping form already supports any address.
 
 ## Garment ink (auto mode)
 
@@ -16,20 +31,13 @@ Heather **gray** and saturated **red** tees (Printful-style) usually need **ligh
 
 **Idea:** The buying flow should **feel like placing a stock or option**—same mental model and similar actions (select instrument / terms, confirm, “execute”). Reinforces the WSB / markets identity and makes checkout feel intentional, not generic merch.
 
-**Possible polish (later):** lightweight celebration moments—**confetti** or similar on order confirmation / payment success, copy that mirrors broker language (“Review order,” “Submit,” “Filled,” etc.) where it does not confuse legally or with real trading.
-
-**Status:** Marketing and UX direction to keep in mind. Confetti on `/order-success` is implemented; other copy ideas below are optional.
+**Status:** Confetti on `/order-success` is implemented; success headline uses “Order filled.”
 
 ## Conviction / “skin in the game” (copy hook)
 
-**Idea:** Appeal to **conviction** about a trade—owning the shirt is a silly but legible signal that you meant the play. Example angles:
+**Idea:** Appeal to **conviction** about a trade—owning the shirt is a silly but legible signal that you meant the play.
 
-- *“If you don’t have a shirt, do you really believe in your play?”* (provocative, shareable)
-- Softer: *“Put your conviction on your chest.”* / *“You didn’t YOLO if there’s no tee.”*
-
-**Use with care:** Playful for the brand; avoid sounding like financial advice or shaming people who don’t buy. Good for **ads, social, email, optional homepage subline**—not a hard requirement for checkout.
-
-**Status:** Messaging only; no product work required unless you A/B test copy.
+**Status:** Homepage H1 uses conviction framing.
 
 ---
 
