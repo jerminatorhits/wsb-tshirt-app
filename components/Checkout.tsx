@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { GeneratedDesign, ColorOption } from '@/lib/merch'
-import { getProductPricing, MUG_SIZES, SHIRT_SIZES, type ProductType } from '@/lib/products'
+import { getProductPricing, SHIRT_SIZES, type ProductType } from '@/lib/products'
 import { validateShippingAddress } from '@/lib/validate-address'
 import PaymentOptions from './PaymentOptions'
 import { Elements } from '@stripe/react-stripe-js'
@@ -348,23 +348,25 @@ export default function Checkout({
       <div className={embedded ? '' : 'mt-5'}>
         {step === 'order' && !isFulfillmentRetry && !wizardMode && (
           <div className="space-y-5">
-            <div>
-              <label className="rh-label">{isMug ? 'Mug size' : 'Size'}</label>
-              <div className={`grid gap-2 ${isMug ? 'grid-cols-3' : 'grid-cols-4'}`}>
-                {(isMug ? MUG_SIZES : SHIRT_SIZES).map((s) => (
-                  <button
-                    key={s}
-                    type="button"
-                    onClick={() => onOrderSizeChange(s)}
-                    className={`rounded-lg border px-3 py-2 text-sm transition ${
-                      orderSize === s ? sizeActiveClass : sizeInactiveClass
-                    }`}
-                  >
-                    {s}
-                  </button>
-                ))}
+            {!isMug && (
+              <div>
+                <label className="rh-label">Size</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {SHIRT_SIZES.map((s) => (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => onOrderSizeChange(s)}
+                      className={`rounded-lg border px-3 py-2 text-sm transition ${
+                        orderSize === s ? sizeActiveClass : sizeInactiveClass
+                      }`}
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
+            )}
             <div>
               <label className="rh-label">Quantity</label>
               <div className="flex items-center gap-3">
@@ -552,17 +554,27 @@ export default function Checkout({
 
         {step === 'payment' && showPaymentForm && !isFulfillmentRetry && !paymentSuccess && (
           <div className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
-            {!wizardMode && (
-              <div className="space-y-1 text-sm text-neutral-700">
-                <p className="text-neutral-500">
-                  {isMug ? `Mug · ${orderSize}` : `${orderSize} · ${selectedColor.name}`} · {shippingInfo.city || '…'}
-                </p>
-                <div className="flex justify-between font-medium text-neutral-900">
-                  <span>Total</span>
-                  <span>${totalPrice}</span>
-                </div>
+            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+              <div className="flex justify-between text-neutral-600">
+                <span>
+                  {isMug ? 'Mug' : 'Tee'}
+                  {quantity > 1 ? ` × ${quantity}` : ''}
+                </span>
+                <span className="tabular-nums">${subtotal.toFixed(2)}</span>
               </div>
-            )}
+              <div className="mt-1.5 flex justify-between text-neutral-600">
+                <span>Shipping</span>
+                <span className="tabular-nums">${shippingCost.toFixed(2)}</span>
+              </div>
+              <div className="mt-1.5 flex justify-between text-neutral-600">
+                <span>Tax</span>
+                <span className="tabular-nums">${estimatedTax.toFixed(2)}</span>
+              </div>
+              <div className="mt-2 flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold text-neutral-900">
+                <span>Total</span>
+                <span className="tabular-nums">${totalPrice}</span>
+              </div>
+            </div>
             {error && (
               <div className="rounded-lg bg-red-50 px-3 py-2">
                 <p className="text-sm text-red-700">{error}</p>

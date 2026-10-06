@@ -92,32 +92,52 @@ export async function POST(request: NextRequest) {
 
     let taxCents = 0
     if (shippingData.address) {
-      // Stripe Tax estimate for the physical shirt line item (exclusive tax).
-      // Jurisdictions differ, so this is address-driven and may vary by destination.
-      const taxCalc = await stripe.tax.calculations.create({
-        currency: 'usd',
-        line_items: [
-          {
-            amount: subtotalCents,
-            reference: orderDetails?.designId || productType,
+      // Stripe Tax estimate for tangible goods + shipping (exclusive tax).
+      // Soft-fail if Tax isn't fully configured (e.g. missing head office / registration).
+      try {
+        const taxCalc = await stripe.tax.calculations.create({
+          currency: 'usd',
+          customer_details: {
+            address: {
+              line1: shippingData.address || '',
+              city: shippingData.city || '',
+              state: shippingData.state || '',
+              postal_code: shippingData.zip || '',
+              country: shippingData.country || 'US',
+            },
+            address_source: 'shipping',
           },
-          {
+          line_items: [
+            {
+              amount: subtotalCents,
+              quantity: quantity,
+              reference: orderDetails?.designId || productType,
+              tax_code: 'txcd_99999999', // General - Tangible Goods
+              tax_behavior: 'exclusive',
+            },
+          ],
+          shipping_cost: {
             amount: shippingCents,
-            reference: 'shipping_flat_rate',
+            tax_code: 'txcd_92010001', // Shipping
+            tax_behavior: 'exclusive',
           },
-        ],
-        customer_details: {
-          address: {
-            line1: shippingData.address || '',
-            city: shippingData.city || '',
-            state: shippingData.state || '',
-            postal_code: shippingData.zip || '',
-            country: shippingData.country || 'US',
-          },
-          address_source: 'shipping',
-        },
-      })
-      taxCents = Number(taxCalc.tax_amount_exclusive || 0)
+        })
+        taxCents = Number(taxCalc.tax_amount_exclusive || 0)
+        logEvent('info', 'payment_intent.create.tax_calculated', {
+          requestId,
+          taxCents,
+          taxAmountExclusive: taxCalc.tax_amount_exclusive,
+        })
+      } catch (taxError: unknown) {
+        const err = taxError as { message?: string; type?: string; code?: string }
+        const message = err?.message || 'Tax calculation unavailable'
+        logEvent('warn', 'payment_intent.create.tax_skipped', {
+          requestId,
+          error: message,
+          type: err?.type,
+          code: err?.code,
+        })
+      }
     }
 
     const totalCents = subtotalCents + shippingCents + taxCents

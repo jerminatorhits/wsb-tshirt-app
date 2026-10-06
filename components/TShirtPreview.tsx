@@ -22,13 +22,13 @@ const shirtBlankCache = new Map<string, string>()
 
 function InstantMugPreview({ imageUrl }: { imageUrl: string }) {
   return (
-    <div className="relative mx-auto flex h-[280px] w-full items-center justify-center">
+    <div className="relative mx-auto flex h-full max-h-56 w-full items-center justify-center">
       <div
-        className="absolute h-[72px] w-[44px] rounded-full border-[9px] border-neutral-200"
-        style={{ right: 'calc(50% - 122px)', top: '36%' }}
+        className="absolute h-[52px] w-[32px] rounded-full border-[7px] border-neutral-200"
+        style={{ right: 'calc(50% - 88px)', top: '34%' }}
         aria-hidden
       />
-      <div className="relative flex h-[228px] w-[168px] items-center justify-center overflow-hidden rounded-[16px] rounded-b-[34px] bg-[#f2f2ef] ring-1 ring-neutral-200">
+      <div className="relative flex h-[70%] w-[42%] items-center justify-center overflow-hidden rounded-[12px] rounded-b-[26px] bg-[#f2f2ef] ring-1 ring-neutral-200">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img src={imageUrl} alt="" className="h-[52%] w-[72%] object-contain" />
       </div>
@@ -200,64 +200,62 @@ export default function TShirtPreview({
   }, [blankShirtUrl, design.imageUrl, isMug, orderSize])
 
   return (
-    <div className={className}>
-      <div className="space-y-4">
-        <div className="relative flex min-h-[240px] items-center justify-center overflow-hidden rounded-xl bg-white p-4 sm:min-h-[300px]">
-          {isMug ? (
-            <div className="relative mx-auto aspect-square w-full max-w-sm">
-              <canvas
-                ref={canvasRef}
-                className={`absolute inset-0 h-full w-full ${previewReady && !previewError ? 'opacity-100' : 'opacity-0'}`}
-              />
-              {(!previewReady || previewError) && (
-                <div className="absolute inset-0 flex items-center justify-center">
-                  {previewError ? (
-                    <InstantMugPreview imageUrl={design.imageUrl} />
-                  ) : (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      src={mugBlankSrc(orderSize)}
-                      alt=""
-                      className="h-full w-full object-contain"
-                    />
-                  )}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="relative mx-auto aspect-[4/5] w-full max-w-xs sm:max-w-sm">
-              <canvas
-                ref={canvasRef}
-                className={`absolute inset-0 h-full w-full ${previewReady && !previewError ? 'opacity-100' : 'opacity-0'}`}
-              />
-              {!previewReady && !previewError && !blankError && <PreviewSpinner />}
-              {(previewError || blankError) && !previewReady && (
-                <p className="absolute inset-x-3 bottom-3 text-center text-xs text-neutral-500">
-                  {blankError || previewError}
-                </p>
-              )}
-            </div>
-          )}
-        </div>
+    <div className={`flex h-full min-h-0 w-full flex-col ${className}`}>
+      <div className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden">
+        {isMug ? (
+          <div className="relative aspect-square h-full max-h-full w-auto max-w-full origin-center scale-[1.28]">
+            <canvas
+              ref={canvasRef}
+              className={`absolute inset-0 h-full w-full ${previewReady && !previewError ? 'opacity-100' : 'opacity-0'}`}
+            />
+            {(!previewReady || previewError) && (
+              <div className="absolute inset-0 flex items-center justify-center">
+                {previewError ? (
+                  <InstantMugPreview imageUrl={design.imageUrl} />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={mugBlankSrc(orderSize)}
+                    alt=""
+                    className="h-full w-full object-contain"
+                  />
+                )}
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="relative aspect-[4/5] h-full max-h-full w-auto max-w-full">
+            <canvas
+              ref={canvasRef}
+              className={`absolute inset-0 h-full w-full ${previewReady && !previewError ? 'opacity-100' : 'opacity-0'}`}
+            />
+            {!previewReady && !previewError && !blankError && <PreviewSpinner />}
+            {(previewError || blankError) && !previewReady && (
+              <p className="absolute inset-x-3 bottom-3 text-center text-xs text-neutral-500">
+                {blankError || previewError}
+              </p>
+            )}
+          </div>
+        )}
 
         {printLayoutControls && (
-          <div>
+          <div className="absolute bottom-2 left-2 right-2 z-10 sm:bottom-3 sm:left-3 sm:right-3">
             <button
               type="button"
               onClick={() => printLayoutControls.onAdvancedOpenChange(!printLayoutControls.advancedOpen)}
-              className="text-sm text-neutral-400 hover:text-neutral-700"
+              className="rounded-full bg-white/90 px-2.5 py-1 text-[11px] text-neutral-500 shadow-sm ring-1 ring-neutral-200/80 hover:text-neutral-800"
             >
-              {printLayoutControls.advancedOpen ? 'Hide design options' : 'Design options'}
+              {printLayoutControls.advancedOpen ? 'Close options' : 'Design options'}
             </button>
             {printLayoutControls.advancedOpen && (
-              <div className="mt-3 space-y-4">
-                <div className="grid grid-cols-3 gap-2">
+              <div className="mt-1.5 space-y-3 rounded-lg border border-neutral-200 bg-white/95 p-3 shadow-sm">
+                <div className="grid grid-cols-3 gap-1.5">
                   {DESIGN_LAYOUT_OPTIONS.map((opt) => (
                     <button
                       key={opt.id}
                       type="button"
                       onClick={() => printLayoutControls.onPresetChange(opt.id)}
-                      className={`rounded-lg border px-2 py-2 text-sm transition ${
+                      className={`rounded-md border px-1.5 py-1.5 text-xs transition ${
                         printLayoutControls.preset === opt.id ? 'rh-toggle-active' : 'rh-toggle-inactive'
                       }`}
                     >
@@ -266,7 +264,7 @@ export default function TShirtPreview({
                   ))}
                 </div>
                 <div>
-                  <label className="mb-1.5 flex justify-between text-sm text-neutral-500">
+                  <label className="mb-1 flex justify-between text-[11px] text-neutral-500">
                     <span>Print size</span>
                     <span className="tabular-nums">{Math.round(printLayoutControls.scale * 100)}%</span>
                   </label>
@@ -282,14 +280,14 @@ export default function TShirtPreview({
                 </div>
                 {productType !== 'mug' && (
                   <div>
-                    <label className="rh-label">Ink</label>
-                    <div className="grid grid-cols-3 gap-2">
+                    <label className="rh-label-compact">Ink</label>
+                    <div className="grid grid-cols-3 gap-1.5">
                       {(['auto', 'dark', 'light'] as const).map((mode) => (
                         <button
                           key={mode}
                           type="button"
                           onClick={() => printLayoutControls.onInkModeChange(mode)}
-                          className={`rounded-lg border px-2 py-1.5 text-sm capitalize transition ${
+                          className={`rounded-md border px-1.5 py-1.5 text-xs capitalize transition ${
                             printLayoutControls.inkMode === mode ? 'rh-toggle-active' : 'rh-toggle-inactive'
                           }`}
                         >

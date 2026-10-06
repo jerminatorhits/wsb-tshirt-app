@@ -12,7 +12,7 @@ import {
   renderDesignToDataURL,
   type DesignLayoutPreset,
 } from '@/lib/text-design'
-import { getProductPricing, MUG_BASE_PRICE, MUG_SIZES, SHIRT_BASE_PRICE, SHIRT_SIZES, parseProductType, type ProductType } from '@/lib/products'
+import { getProductPricing, MUG_BASE_PRICE, SHIRT_BASE_PRICE, SHIRT_SIZES, parseProductType, type ProductType } from '@/lib/products'
 
 interface TickerSearchResult {
   symbol: string
@@ -80,7 +80,7 @@ export default function Home() {
   const [designInkMode, setDesignInkMode] = useState<'auto' | 'light' | 'dark'>('auto')
   const [designAdvancedOpen, setDesignAdvancedOpen] = useState(false)
   const [productType, setProductType] = useState<ProductType>('mug')
-  const [orderSize, setOrderSize] = useState<string>(MUG_SIZES[0])
+  const [orderSize, setOrderSize] = useState<string>('11 oz')
   const [step, setStep] = useState<AppStep>('create')
   const [quantity, setQuantity] = useState(1)
   const [checkoutTax, setCheckoutTax] = useState(0)
@@ -353,7 +353,7 @@ export default function Home() {
 
   const handleProductTypeChange = (next: ProductType) => {
     setProductType(next)
-    setOrderSize(next === 'mug' ? MUG_SIZES[0] : 'M')
+    setOrderSize(next === 'mug' ? '11 oz' : 'M')
   }
 
   const buildPromptFromParsed = (parsed: Extract<ParsedDesignForm, { ok: true }>) => {
@@ -473,367 +473,344 @@ export default function Home() {
 
   const parsedForm = parseDesignForm()
   const canCheckout = parsedForm.ok && Boolean(generatedDesign)
+  const compactToggle = (active: boolean) =>
+    `rounded-md border px-2.5 py-2 text-sm transition ${active ? 'rh-toggle-active' : 'rh-toggle-inactive'}`
 
   return (
-    <main>
-      <div className="mx-auto max-w-lg px-4 pb-16 pt-2">
+    <main className={step === 'create' ? 'h-full min-h-0' : undefined}>
+      <div
+        className={
+          step === 'create'
+            ? 'mx-auto flex h-full min-h-0 max-w-xl flex-col px-4 pb-3 pt-3 sm:px-6 sm:pt-4'
+            : 'mx-auto max-w-lg px-4 pb-16 pt-2'
+        }
+      >
         {step === 'create' && (
           <>
-            <h1 className="text-2xl font-semibold tracking-tight text-neutral-900">
-              Your ticker, on merch.
-            </h1>
-            <p className="mt-1 text-sm text-neutral-500">Printed to order. Ships in 5–7 days.</p>
-
-            {errorMessage && <p className="mt-4 text-sm text-red-600">{errorMessage}</p>}
-
-            <div className="mt-8 space-y-6">
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  aria-pressed={productType === 'mug'}
-                  onClick={() => handleProductTypeChange('mug')}
-                  className={`rounded-lg border px-3 py-2.5 text-sm transition ${
-                    productType === 'mug' ? 'rh-toggle-active' : 'rh-toggle-inactive'
-                  }`}
-                >
-                  {`Mug · $${MUG_BASE_PRICE.toFixed(2)}`}
-                </button>
-                <button
-                  type="button"
-                  aria-pressed={productType === 'shirt'}
-                  onClick={() => handleProductTypeChange('shirt')}
-                  className={`rounded-lg border px-3 py-2.5 text-sm transition ${
-                    productType === 'shirt' ? 'rh-toggle-active' : 'rh-toggle-inactive'
-                  }`}
-                >
-                  {`T-shirt · $${SHIRT_BASE_PRICE.toFixed(2)}`}
-                </button>
-              </div>
-
-              {productType === 'mug' ? (
-                <div>
-                  <label className="rh-label">Size</label>
-                  <div className="grid grid-cols-3 gap-2">
-                    {MUG_SIZES.map((s) => (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setOrderSize(s)}
-                        className={`rounded-lg border px-2 py-2 text-sm transition ${
-                          orderSize === s ? 'rh-toggle-active' : 'rh-toggle-inactive'
-                        }`}
-                      >
-                        {s}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  <div>
-                    <label className="rh-label">Size</label>
-                    <div className="grid grid-cols-4 gap-2 sm:grid-cols-7">
-                      {SHIRT_SIZES.map((s) => (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setOrderSize(s)}
-                          className={`rounded-lg border px-2 py-2 text-sm transition ${
-                            orderSize === s ? 'rh-toggle-active' : 'rh-toggle-inactive'
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                  <div>
-                    <label className="rh-label">Color</label>
-                    <div className="flex gap-2">
-                      {COLORS.map((c) => (
-                        <button
-                          key={c.value}
-                          type="button"
-                          onClick={() => setSelectedColor(c)}
-                          className={`h-8 w-8 rounded-full border transition ${
-                            selectedColor.value === c.value
-                              ? 'border-neutral-900 ring-2 ring-neutral-900/20'
-                              : 'border-neutral-300 hover:border-neutral-400'
-                          }`}
-                          style={{ backgroundColor: c.hex }}
-                          title={c.name}
-                          aria-label={c.name}
-                        />
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              )}
-
+            <div className="flex shrink-0 items-end justify-between gap-3">
               <div>
-                <label className="rh-label">Print</label>
+                <h1 className="text-xl font-semibold tracking-tight text-neutral-900 sm:text-2xl">
+                  Your ticker, on merch.
+                </h1>
+                <p className="mt-0.5 text-sm text-neutral-500">
+                  Pick a product, enter a ticker, checkout.
+                </p>
+              </div>
+            </div>
+
+            {errorMessage && <p className="mt-2 shrink-0 text-xs text-red-600">{errorMessage}</p>}
+
+            <div className="mt-3 flex min-h-0 flex-1 flex-col gap-3">
+              <div className="flex w-full shrink-0 flex-col gap-3 rounded-2xl border border-neutral-200 bg-white p-3 sm:p-4">
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
-                    aria-pressed={expressionMode === 'price'}
-                    onClick={() => setExpressionMode('price')}
-                    className={`rounded-lg border px-3 py-2.5 text-sm transition ${
-                      expressionMode === 'price' ? 'rh-toggle-active' : 'rh-toggle-inactive'
-                    }`}
+                    aria-pressed={productType === 'mug'}
+                    onClick={() => handleProductTypeChange('mug')}
+                    className={compactToggle(productType === 'mug')}
                   >
-                    Stock price
+                    {`Mug · $${MUG_BASE_PRICE.toFixed(2)}`}
                   </button>
                   <button
                     type="button"
-                    aria-pressed={expressionMode === 'option'}
-                    onClick={() => setExpressionMode('option')}
-                    className={`rounded-lg border px-3 py-2.5 text-sm transition ${
-                      expressionMode === 'option' ? 'rh-toggle-active' : 'rh-toggle-inactive'
-                    }`}
+                    aria-pressed={productType === 'shirt'}
+                    onClick={() => handleProductTypeChange('shirt')}
+                    className={compactToggle(productType === 'shirt')}
                   >
-                    Options contract
+                    {`Tee · $${SHIRT_BASE_PRICE.toFixed(2)}`}
                   </button>
                 </div>
-              </div>
 
-              <div
-                className={`relative z-30 grid gap-2 ${
-                  expressionMode === 'price' ? 'grid-cols-2' : 'grid-cols-4'
-                }`}
-              >
-                <div className="relative">
-                  <label className="rh-label" htmlFor="ticker">
-                    Ticker
-                  </label>
-                  <input
-                    id="ticker"
-                    type="text"
-                    value={ticker}
-                    onChange={(e) => {
-                      setTickerPrefilledFromUrl(false)
-                      setTicker(e.target.value.toUpperCase())
-                      setTickerMenuOpen(true)
-                    }}
-                    onFocus={() => {
-                      if (ticker.trim()) setTickerMenuOpen(true)
-                    }}
-                    onBlur={() => {
-                      window.setTimeout(() => setTickerMenuOpen(false), 150)
-                    }}
-                    placeholder="TSLA"
-                    maxLength={6}
-                    className="rh-input px-2 sm:px-3"
-                    autoComplete="off"
-                    role="combobox"
-                    aria-expanded={tickerMenuOpen}
-                    aria-controls="ticker-suggestions"
-                  />
-                  {tickerMenuOpen && ticker && (tickerSuggestions.length > 0 || tickerSuggestionLoading) && (
-                    <div
-                      id="ticker-suggestions"
-                      role="listbox"
-                      className="absolute left-0 top-full z-50 mt-1 w-[min(18rem,calc(100vw-2rem))] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lg"
-                    >
-                      {tickerSuggestions.length === 0 && tickerSuggestionLoading ? (
-                        <p className="px-3 py-2 text-sm text-neutral-400">Searching…</p>
-                      ) : (
-                        tickerSuggestions.map((item) => (
+                {productType !== 'mug' && (
+                  <div className="space-y-2">
+                    <div>
+                      <label className="rh-label-compact">Size</label>
+                      <div className="grid grid-cols-7 gap-1">
+                        {SHIRT_SIZES.map((s) => (
                           <button
-                            key={`${item.symbol}-${item.name}`}
+                            key={s}
                             type="button"
-                            role="option"
-                            onMouseDown={(e) => {
-                              e.preventDefault()
-                              setTickerPrefilledFromUrl(true)
-                              setTicker(item.symbol)
-                              setTickerSuggestions([])
-                              setTickerMenuOpen(false)
-                            }}
-                            className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-50"
+                            onClick={() => setOrderSize(s)}
+                            className={`${compactToggle(orderSize === s)} px-0.5 text-[11px] sm:text-sm`}
                           >
-                            <span className="font-semibold">{item.symbol}</span>
-                            <span className="ml-3 truncate text-sm text-neutral-400">{item.name}</span>
+                            {s}
                           </button>
-                        ))
-                      )}
+                        ))}
+                      </div>
                     </div>
-                  )}
+                    <div className="flex items-center gap-2">
+                      <span className="rh-label-compact mb-0">Color</span>
+                      <div className="flex gap-1.5">
+                        {COLORS.map((c) => (
+                          <button
+                            key={c.value}
+                            type="button"
+                            onClick={() => setSelectedColor(c)}
+                            className={`h-7 w-7 rounded-full border transition ${
+                              selectedColor.value === c.value
+                                ? 'border-neutral-900 ring-2 ring-neutral-900/20'
+                                : 'border-neutral-300 hover:border-neutral-400'
+                            }`}
+                            style={{ backgroundColor: c.hex }}
+                            title={c.name}
+                            aria-label={c.name}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div>
+                  <label className="rh-label-compact">Print</label>
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      aria-pressed={expressionMode === 'price'}
+                      onClick={() => setExpressionMode('price')}
+                      className={compactToggle(expressionMode === 'price')}
+                    >
+                      Price
+                    </button>
+                    <button
+                      type="button"
+                      aria-pressed={expressionMode === 'option'}
+                      onClick={() => setExpressionMode('option')}
+                      className={compactToggle(expressionMode === 'option')}
+                    >
+                      Option
+                    </button>
+                  </div>
                 </div>
 
-                {expressionMode === 'price' ? (
-                  <div>
-                    <label className="rh-label" htmlFor="price">
-                      Price
+                <div
+                  className={`relative z-30 grid gap-2 ${
+                    expressionMode === 'price' ? 'grid-cols-2' : 'grid-cols-4'
+                  }`}
+                >
+                  <div className="relative">
+                    <label className="rh-label-compact" htmlFor="ticker">
+                      Ticker
                     </label>
                     <input
-                      id="price"
+                      id="ticker"
                       type="text"
-                      inputMode="decimal"
-                      value={numberValue}
+                      value={ticker}
                       onChange={(e) => {
-                        const next = e.target.value.replace(/[^0-9.]/g, '')
-                        const normalized = next.replace(/^\./, '').replace(/(\..*)\./g, '$1')
-                        setNumberValue(normalized)
+                        setTickerPrefilledFromUrl(false)
+                        setTicker(e.target.value.toUpperCase())
+                        setTickerMenuOpen(true)
                       }}
-                      placeholder="500"
-                      className="rh-input"
+                      onFocus={() => {
+                        if (ticker.trim()) setTickerMenuOpen(true)
+                      }}
+                      onBlur={() => {
+                        window.setTimeout(() => setTickerMenuOpen(false), 150)
+                      }}
+                      placeholder="TSLA"
+                      maxLength={6}
+                      className="rh-input-compact"
+                      autoComplete="off"
+                      role="combobox"
+                      aria-expanded={tickerMenuOpen}
+                      aria-controls="ticker-suggestions"
                     />
+                    {tickerMenuOpen && ticker && (tickerSuggestions.length > 0 || tickerSuggestionLoading) && (
+                      <div
+                        id="ticker-suggestions"
+                        role="listbox"
+                        className="absolute left-0 top-full z-50 mt-1 w-[min(18rem,calc(100vw-1.5rem))] overflow-hidden rounded-lg border border-neutral-200 bg-white shadow-lg"
+                      >
+                        {tickerSuggestions.length === 0 && tickerSuggestionLoading ? (
+                          <p className="px-3 py-2 text-sm text-neutral-400">Searching…</p>
+                        ) : (
+                          tickerSuggestions.map((item) => (
+                            <button
+                              key={`${item.symbol}-${item.name}`}
+                              type="button"
+                              role="option"
+                              onMouseDown={(e) => {
+                                e.preventDefault()
+                                setTickerPrefilledFromUrl(true)
+                                setTicker(item.symbol)
+                                setTickerSuggestions([])
+                                setTickerMenuOpen(false)
+                              }}
+                              className="flex w-full items-center justify-between px-3 py-2 text-left hover:bg-neutral-50"
+                            >
+                              <span className="font-semibold">{item.symbol}</span>
+                              <span className="ml-3 truncate text-sm text-neutral-400">{item.name}</span>
+                            </button>
+                          ))
+                        )}
+                      </div>
+                    )}
                   </div>
+
+                  {expressionMode === 'price' ? (
+                    <div>
+                      <label className="rh-label-compact" htmlFor="price">
+                        Price
+                      </label>
+                      <input
+                        id="price"
+                        type="text"
+                        inputMode="decimal"
+                        value={numberValue}
+                        onChange={(e) => {
+                          const next = e.target.value.replace(/[^0-9.]/g, '')
+                          const normalized = next.replace(/^\./, '').replace(/(\..*)\./g, '$1')
+                          setNumberValue(normalized)
+                        }}
+                        placeholder="500"
+                        className="rh-input-compact"
+                      />
+                    </div>
+                  ) : (
+                    <>
+                      <div>
+                        <label className="rh-label-compact" htmlFor="option-type">
+                          Type
+                        </label>
+                        <select
+                          id="option-type"
+                          value={optionType}
+                          onChange={(e) => setOptionType(e.target.value === 'PUT' ? 'PUT' : 'CALL')}
+                          className="rh-input-compact"
+                        >
+                          <option value="CALL">Call</option>
+                          <option value="PUT">Put</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label className="rh-label-compact" htmlFor="expiration">
+                          Exp
+                        </label>
+                        <select
+                          id="expiration"
+                          value={selectedExpiration}
+                          onChange={(e) => setSelectedExpiration(e.target.value)}
+                          className="rh-input-compact"
+                        >
+                          {optionDataLoading && expirationDates.length === 0 ? (
+                            <option value="">Loading…</option>
+                          ) : expirationDates.length === 0 ? (
+                            <option value="">{optionDataError ? 'Unavailable' : '—'}</option>
+                          ) : (
+                            expirationDates.map((date) => (
+                              <option key={date} value={String(date)}>
+                                {formatOptionDateShort(date)}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                      <div>
+                        <label className="rh-label-compact" htmlFor="strike">
+                          Strike
+                        </label>
+                        <select
+                          id="strike"
+                          value={selectedStrike}
+                          onChange={(e) => setSelectedStrike(e.target.value)}
+                          className="rh-input-compact"
+                        >
+                          {optionDataLoading && activeStrikes.length === 0 ? (
+                            <option value="">Loading…</option>
+                          ) : activeStrikes.length === 0 ? (
+                            <option value="">{optionDataError ? 'Unavailable' : '—'}</option>
+                          ) : (
+                            activeStrikes.map((strike) => (
+                              <option key={strike} value={String(strike)}>
+                                {strike}
+                              </option>
+                            ))
+                          )}
+                        </select>
+                      </div>
+                    </>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => void handleCopyShareLink()}
+                  className="self-start text-xs text-neutral-400 hover:text-neutral-700"
+                >
+                  {shareStatus || 'Copy link'}
+                </button>
+              </div>
+
+              <div className="min-h-0 min-w-0 flex-1">
+                {generatedDesign ? (
+                  <TShirtPreview
+                    key={productType}
+                    embedded
+                    className="h-full w-full"
+                    design={generatedDesign}
+                    topic={generatedDesign.topic}
+                    productType={productType}
+                    orderSize={orderSize}
+                    onOrderSizeChange={setOrderSize}
+                    selectedColor={selectedColor}
+                    onColorChange={setSelectedColor}
+                    printLayoutControls={{
+                      preset: designLayoutPreset,
+                      onPresetChange: setDesignLayoutPreset,
+                      scale: designScale,
+                      onScaleChange: setDesignScale,
+                      inkMode: designInkMode,
+                      onInkModeChange: setDesignInkMode,
+                      advancedOpen: designAdvancedOpen,
+                      onAdvancedOpenChange: setDesignAdvancedOpen,
+                    }}
+                  />
                 ) : (
-                  <>
-                    <div>
-                      <label className="rh-label" htmlFor="option-type">
-                        Type
-                      </label>
-                      <select
-                        id="option-type"
-                        value={optionType}
-                        onChange={(e) => setOptionType(e.target.value === 'PUT' ? 'PUT' : 'CALL')}
-                        className="rh-input px-2"
-                      >
-                        <option value="CALL">Call</option>
-                        <option value="PUT">Put</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label className="rh-label" htmlFor="expiration">
-                        Exp
-                      </label>
-                      <select
-                        id="expiration"
-                        value={selectedExpiration}
-                        onChange={(e) => setSelectedExpiration(e.target.value)}
-                        className="rh-input px-2"
-                      >
-                        {optionDataLoading && expirationDates.length === 0 ? (
-                          <option value="">Loading…</option>
-                        ) : expirationDates.length === 0 ? (
-                          <option value="">{optionDataError ? 'Unavailable' : '—'}</option>
-                        ) : (
-                          expirationDates.map((date) => (
-                            <option key={date} value={String(date)}>
-                              {formatOptionDateShort(date)}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </div>
-                    <div>
-                      <label className="rh-label" htmlFor="strike">
-                        Strike
-                      </label>
-                      <select
-                        id="strike"
-                        value={selectedStrike}
-                        onChange={(e) => setSelectedStrike(e.target.value)}
-                        className="rh-input px-2"
-                      >
-                        {optionDataLoading && activeStrikes.length === 0 ? (
-                          <option value="">Loading…</option>
-                        ) : activeStrikes.length === 0 ? (
-                          <option value="">{optionDataError ? 'Unavailable' : '—'}</option>
-                        ) : (
-                          activeStrikes.map((strike) => (
-                            <option key={strike} value={String(strike)}>
-                              {strike}
-                            </option>
-                          ))
-                        )}
-                      </select>
-                    </div>
-                  </>
-                )}
-              </div>
-
-              {generatedDesign ? (
-                <TShirtPreview
-                  key={productType}
-                  embedded
-                  design={generatedDesign}
-                  topic={generatedDesign.topic}
-                  productType={productType}
-                  orderSize={orderSize}
-                  onOrderSizeChange={setOrderSize}
-                  selectedColor={selectedColor}
-                  onColorChange={setSelectedColor}
-                  printLayoutControls={{
-                    preset: designLayoutPreset,
-                    onPresetChange: setDesignLayoutPreset,
-                    scale: designScale,
-                    onScaleChange: setDesignScale,
-                    inkMode: designInkMode,
-                    onInkModeChange: setDesignInkMode,
-                    advancedOpen: designAdvancedOpen,
-                    onAdvancedOpenChange: setDesignAdvancedOpen,
-                  }}
-                />
-              ) : (
-                <div className="flex min-h-[220px] items-center justify-center rounded-xl bg-white px-4 text-center text-sm text-neutral-400">
-                  Enter a ticker and price to preview your {productType === 'mug' ? 'mug' : 't-shirt'}
-                </div>
-              )}
-
-              <div>
-                <p className="text-sm text-neutral-500">Quantity</p>
-                <div className="mt-1 flex items-center gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                    disabled={quantity <= 1}
-                    className="h-9 w-9 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
-                  >
-                    −
-                  </button>
-                  <span className="w-6 text-center">{quantity}</span>
-                  <button
-                    type="button"
-                    onClick={() => setQuantity(Math.min(10, quantity + 1))}
-                    disabled={quantity >= 10}
-                    className="h-9 w-9 rounded-lg border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
-                  >
-                    +
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-1 text-sm">
-                <div className="flex justify-between text-neutral-600">
-                  <span>Subtotal{quantity > 1 ? ` · ${quantity} × $${basePrice.toFixed(2)}` : ''}</span>
-                  <span className="tabular-nums">${orderSubtotal.toFixed(2)}</span>
-                </div>
-                <div className="flex justify-between text-neutral-600">
-                  <span>Shipping</span>
-                  <span className="tabular-nums">${shippingFlatRate.toFixed(2)}</span>
-                </div>
-                {checkoutTax > 0 && (
-                  <div className="flex justify-between text-neutral-600">
-                    <span>Tax</span>
-                    <span className="tabular-nums">${checkoutTax.toFixed(2)}</span>
+                  <div className="flex h-full min-h-[220px] flex-col items-center justify-center px-6 text-center">
+                    <p className="text-sm text-neutral-500">
+                      {designGenerating ? 'Building preview…' : 'Enter a ticker and price to preview'}
+                    </p>
                   </div>
                 )}
-                <div className="flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold text-neutral-900">
-                  <span>Total</span>
-                  <span className="tabular-nums">${orderTotalPreview}</span>
-                </div>
               </div>
+            </div>
 
+            <div className="mt-2 flex shrink-0 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5 sm:px-4">
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                  disabled={quantity <= 1}
+                  className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+                  aria-label="Decrease quantity"
+                >
+                  −
+                </button>
+                <span className="w-6 text-center text-sm tabular-nums">{quantity}</span>
+                <button
+                  type="button"
+                  onClick={() => setQuantity(Math.min(10, quantity + 1))}
+                  disabled={quantity >= 10}
+                  className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
+                  aria-label="Increase quantity"
+                >
+                  +
+                </button>
+              </div>
+              <div className="min-w-0 flex-1 text-right">
+                <p className="text-lg font-semibold tabular-nums leading-tight">${orderTotalPreview}</p>
+                <p className="truncate text-[11px] leading-tight text-neutral-500">
+                  ${orderSubtotal.toFixed(2)} + ${shippingFlatRate.toFixed(2)} shipping
+                  {checkoutTax > 0 ? ` + $${checkoutTax.toFixed(2)} tax` : ''}
+                </p>
+              </div>
               <button
                 type="button"
                 onClick={handleCheckout}
                 disabled={!canCheckout}
-                className="rh-btn-primary"
+                className="rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
               >
-                {designGenerating && !generatedDesign
-                  ? 'Generating preview…'
-                  : 'Checkout'}
+                {designGenerating && !generatedDesign ? '…' : 'Checkout'}
               </button>
-
-              <div className="flex items-center justify-center gap-3 text-xs text-neutral-400">
-                <button type="button" onClick={() => void handleCopyShareLink()} className="hover:text-neutral-700">
-                  Copy link
-                </button>
-                {shareStatus && <span>{shareStatus}</span>}
-              </div>
             </div>
           </>
         )}
@@ -861,7 +838,9 @@ export default function Home() {
               <h1 className="text-2xl font-semibold tracking-tight">
                 {step === 'shipping' ? 'Shipping' : 'Payment'}
               </h1>
-              <p className="text-lg font-semibold tabular-nums">${orderTotalPreview}</p>
+              {step === 'shipping' && (
+                <p className="text-lg font-semibold tabular-nums">${orderTotalPreview}</p>
+              )}
             </div>
             <div className="mt-6">
               <Checkout
