@@ -5,9 +5,16 @@
 export type AppRuntimeEnv = 'production' | 'staging' | 'development'
 
 export function getAppRuntimeEnv(): AppRuntimeEnv {
-  const explicit = (process.env.APP_ENV || process.env.NEXT_PUBLIC_APP_ENV || '').toLowerCase()
+  const explicit = (process.env.APP_ENV || process.env.NEXT_PUBLIC_APP_ENV || '')
+    .trim()
+    .toLowerCase()
   if (explicit === 'staging' || explicit === 'preview') return 'staging'
   if (explicit === 'production') return 'production'
+  // Dedicated staging Vercel project (name contains "staging") even when VERCEL_ENV=production
+  const project = (process.env.VERCEL_PROJECT_PRODUCTION_URL || process.env.VERCEL_URL || '')
+    .trim()
+    .toLowerCase()
+  if (project.includes('staging')) return 'staging'
   if (process.env.VERCEL_ENV === 'preview') return 'staging'
   if (process.env.VERCEL_ENV === 'production') return 'production'
   return 'development'
