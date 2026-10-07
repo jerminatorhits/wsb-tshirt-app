@@ -1,9 +1,12 @@
 import Stripe from 'stripe'
 import axios from 'axios'
+import { assertStripeKeysSafeForRuntime, isPrintfulDryRun } from '@/lib/env-safety'
 import { parseProductType, type ProductType } from '@/lib/products'
 import { buildPrintfulOrderFiles, getPrintfulVariantId } from '@/lib/printful-print-files'
 import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 import { validateShippingAddress } from '@/lib/validate-address'
+
+assertStripeKeysSafeForRuntime()
 
 export const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
@@ -110,10 +113,16 @@ export async function fulfillFromPaymentIntent(
     return { success: false, status: 400, error: 'Payment Intent ID is required' }
   }
 
+  try {
+    assertStripeKeysSafeForRuntime()
+  } catch (e: any) {
+    return { success: false, status: 500, error: e?.message || 'Unsafe Stripe configuration' }
+  }
+
   if (!process.env.STRIPE_SECRET_KEY) {
     return { success: false, status: 500, error: 'Stripe not configured' }
   }
-  if (!process.env.PRINTFUL_API_KEY) {
+  if (!process.env.PRINTFUL_API_KEY && !isPrintfulDryRun()) {
     return { success: false, status: 500, error: 'Printful API key not configured' }
   }
 
@@ -163,6 +172,19 @@ export async function fulfillFromPaymentIntent(
   }
 
   try {
+    // Staging/preview: never create a real Printful order (even drafts hit the live account).
+    if (isPrintfulDryRun()) {
+      const dryRunOrderId = `dry-run-${paymentIntentId.slice(-8)}`
+      await stripe.paymentIntents.update(paymentIntentId, {
+        metadata: {
+          ...paymentIntent.metadata,
+          printfulOrderId: dryRunOrderId,
+          fulfillmentStatus: 'dry_run',
+        },
+      })
+      return { success: true, orderId: dryRunOrderId, alreadyFulfilled: false }
+    }
+
     // Omit confirm=1 so Printful keeps the order as draft for manual review/approval in dashboard.
     const orderResponse = await axios.post(
       'https://api.printful.com/orders',

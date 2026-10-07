@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import Link from 'next/link'
+import StagingBanner from '@/components/StagingBanner'
 import { fontAnton, fontBebas, fontJetbrains, fontOswald } from '@/lib/design-fonts'
 import './globals.css'
 
@@ -20,6 +21,7 @@ export default function RootLayout({
     >
       <body className="bg-background text-neutral-900 antialiased">
         <div className="flex h-dvh flex-col overflow-hidden">
+          <StagingBanner />
           <header className="shrink-0 border-b border-neutral-200/80">
             <div className="mx-auto flex w-full max-w-xl items-center justify-between px-4 py-3 sm:px-6">
               <Link href="/" className="text-sm font-semibold tracking-tight text-neutral-900">

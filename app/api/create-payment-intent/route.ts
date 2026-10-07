@@ -1,15 +1,17 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { assertStripeKeysSafeForRuntime } from '@/lib/env-safety'
 import { validateShippingAddress } from '@/lib/validate-address'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getRequestId, jsonWithRequestId, logEvent } from '@/lib/observability'
 import { basicAbuseCheck } from '@/lib/abuse-protection'
+import { getProductPricing, parseProductType } from '@/lib/products'
+
+assertStripeKeysSafeForRuntime()
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
 })
-
-import { getProductPricing, parseProductType } from '@/lib/products'
 
 async function normalizeImageUrlForMetadata(imageUrl: string): Promise<string> {
   if (!imageUrl || !imageUrl.startsWith('data:')) return imageUrl || ''

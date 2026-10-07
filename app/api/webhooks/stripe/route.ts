@@ -1,7 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
+import { assertStripeKeysSafeForRuntime } from '@/lib/env-safety'
 import { fulfillFromPaymentIntent } from '@/lib/fulfillment'
 import { getRequestId, jsonWithRequestId, logEvent } from '@/lib/observability'
+
+assertStripeKeysSafeForRuntime()
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
   apiVersion: '2023-10-16',
@@ -9,6 +12,18 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY || '', {
 
 export async function POST(request: NextRequest) {
   const requestId = getRequestId(request)
+  try {
+    assertStripeKeysSafeForRuntime()
+  } catch (e: any) {
+    logEvent('error', 'webhook.stripe.unsafe_keys', {
+      requestId,
+      error: e?.message || 'Unsafe Stripe configuration',
+    })
+    return jsonWithRequestId({ error: e?.message || 'Unsafe Stripe configuration' }, requestId, {
+      status: 500,
+    })
+  }
+
   const body = await request.text()
   const signature = request.headers.get('stripe-signature')
 

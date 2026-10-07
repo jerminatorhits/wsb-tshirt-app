@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import axios from 'axios'
 import FormData from 'form-data'
+import { isPrintfulDryRun } from '@/lib/env-safety'
 import { getVariantId } from '@/lib/printful-variants'
 import { getPrintfulAuthHeaders } from '@/lib/printful-headers'
 
@@ -13,6 +14,16 @@ export async function POST(request: NextRequest) {
         { error: 'Missing required fields' },
         { status: 400 }
       )
+    }
+
+    if (isPrintfulDryRun()) {
+      return NextResponse.json({
+        success: true,
+        orderUrl: '#',
+        message: 'Printful dry-run: no real order created (staging/preview).',
+        orderId: `dry-run-${Date.now()}`,
+        dryRun: true,
+      })
     }
 
     const printfulApiKey = process.env.PRINTFUL_API_KEY
