@@ -26,7 +26,7 @@ export async function GET(req: NextRequest) {
 
   try {
     const upstream = await fetch(raw, {
-      headers: { 'User-Agent': 'WSB-Shirt-Lab/1.0' },
+      headers: { 'User-Agent': 'stonkmugs/1.0' },
       next: { revalidate: 3600 },
     })
     if (!upstream.ok) {

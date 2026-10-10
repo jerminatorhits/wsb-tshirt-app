@@ -59,7 +59,7 @@ interface PaymentFormProps {
 function CheckoutForm({
   amount,
   onSuccess,
-  onError,
+  onError: _onError,
   shippingInfo,
   orderDetails,
   clientSecret,
@@ -71,13 +71,6 @@ function CheckoutForm({
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const isProcessing = loading || submitDisabled
-
-  // Reset loading when onError is called (for fulfillment failures)
-  const originalOnError = onError
-  const wrappedOnError = (error: string) => {
-    setLoading(false)
-    originalOnError(error)
-  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -93,10 +86,11 @@ function CheckoutForm({
       // First, submit the elements to validate the form
       // This must be called before confirmPayment()
       const { error: submitError } = await elements.submit()
-      
+
       if (submitError) {
-        setErrorMessage(submitError.message || 'Form validation failed')
-        onError(submitError.message || 'Form validation failed')
+        // Stripe Payment Element already shows the field-level message (e.g. under ZIP).
+        // Do not mirror it into a second banner.
+        setErrorMessage(null)
         setLoading(false)
         return
       }
@@ -134,8 +128,8 @@ function CheckoutForm({
       })
 
       if (error) {
+        // One banner above Pay — do not also push to Checkout (that duplicated the message).
         setErrorMessage(error.message || 'Payment failed')
-        wrappedOnError(error.message || 'Payment failed')
         setLoading(false)
       } else if (paymentIntent && paymentIntent.status === 'succeeded') {
         // Extract shipping info from payment intent if available (from Apple Pay/Google Pay)
@@ -168,7 +162,6 @@ function CheckoutForm({
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'An error occurred')
-      wrappedOnError(err.message || 'An error occurred')
       setLoading(false)
     }
   }
@@ -209,8 +202,8 @@ function CheckoutForm({
       </div>
 
       {errorMessage && (
-        <div className="p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-          <p className="text-sm text-red-800 dark:text-red-200">{errorMessage}</p>
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2.5" role="alert">
+          <p className="text-sm font-medium text-red-900">{errorMessage}</p>
         </div>
       )}
 
@@ -225,7 +218,7 @@ function CheckoutForm({
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
             </svg>
-            {submitDisabled ? 'Processing order...' : 'Processing Payment...'}
+            {submitDisabled ? 'Processing order…' : 'Processing…'}
           </span>
         ) : (
           `Pay $${amount.toFixed(2)}`
@@ -324,8 +317,8 @@ export default function PaymentForm(props: PaymentFormProps) {
 
   if (error) {
     return (
-      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-        <p className="text-sm text-red-800 dark:text-red-200">{error}</p>
+      <div className="rounded-lg border border-red-300 bg-red-50 p-4" role="alert">
+        <p className="text-sm font-medium text-red-900">{error}</p>
       </div>
     )
   }
@@ -343,8 +336,8 @@ export default function PaymentForm(props: PaymentFormProps) {
 
   if (!stripeKey) {
     return (
-      <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+      <div className="rounded-lg border border-amber-300 bg-amber-50 p-4" role="alert">
+        <p className="text-sm font-medium text-amber-950">
           Stripe publishable key not configured. Please add NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY to your .env file and restart the server.
         </p>
       </div>
@@ -353,8 +346,8 @@ export default function PaymentForm(props: PaymentFormProps) {
 
   if (!stripePromise) {
     return (
-      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-        <p className="text-sm text-red-800 dark:text-red-200">
+      <div className="rounded-lg border border-red-300 bg-red-50 p-4" role="alert">
+        <p className="text-sm font-medium text-red-900">
           Failed to initialize Stripe. Please check your publishable key.
         </p>
       </div>
@@ -363,8 +356,8 @@ export default function PaymentForm(props: PaymentFormProps) {
 
   if (!effectiveClientSecret) {
     return (
-      <div className="p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg">
-        <p className="text-sm text-red-800 dark:text-red-200">
+      <div className="rounded-lg border border-red-300 bg-red-50 p-4" role="alert">
+        <p className="text-sm font-medium text-red-900">
           Failed to create payment intent. Please try again.
         </p>
       </div>

@@ -35,3 +35,14 @@ Point a **test-mode** Stripe webhook at:
 `https://wsb-tshirt-app-staging.vercel.app/api/webhooks/stripe`
 
 Set `STRIPE_WEBHOOK_SECRET` on the staging project only (test endpoint signing secret).
+
+## Orders / support
+
+Orders are stored on **Stripe PaymentIntent metadata** (no app database yet):
+
+- `orderNumber` — customer-facing code like `WSB-7K4M2Q`
+- Item + shipping JSON, amounts
+- `printfulOrderId` — real Printful id in prod, or `dry-run-…` on staging
+- `fulfillmentStatus` — `pending` / `fulfilled` / `dry_run`
+
+Lookup: `/orders` (order number + checkout email). Success page: `/order-success?payment_intent=pi_…`.

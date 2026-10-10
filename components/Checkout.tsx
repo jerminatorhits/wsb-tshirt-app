@@ -61,10 +61,11 @@ export default function Checkout({
   const [error, setError] = useState<string | null>(null)
   const [showShippingForm, setShowShippingForm] = useState(true)
   const [showPaymentForm, setShowPaymentForm] = useState(false)
-  const [paymentSuccess, setPaymentSuccess] = useState(false)
   const [paymentIntentClientSecret, setPaymentIntentClientSecret] = useState<string | null>(null)
   const [chargedTotal, setChargedTotal] = useState<number | null>(null)
   const [succeededPaymentIntentId, setSucceededPaymentIntentId] = useState<string | null>(null)
+  /** After card succeeds — replace payment UI with loading until order-success loads. */
+  const [completingCheckout, setCompletingCheckout] = useState(false)
   const [step, setStep] = useState<WizardStep>(wizardMode ? 'shipping' : 'order')
 
   const [shippingInfo, setShippingInfo] = useState({
@@ -256,6 +257,7 @@ export default function Checkout({
   const handlePaymentSuccess = async (paymentIntentId: string, paymentShippingInfo?: any) => {
     setLoading(true)
     setError(null)
+    setCompletingCheckout(true)
 
     // First successful charge: fulfillment runs from the Stripe `payment_intent.succeeded` webhook only.
     // Calling `/api/fulfill-order` here too races the webhook; both see empty `printfulOrderId` metadata
@@ -264,11 +266,8 @@ export default function Checkout({
       succeededPaymentIntentId != null && paymentIntentId === succeededPaymentIntentId
 
     if (!isRetryAfterFulfillmentFailure) {
-      setPaymentSuccess(true)
-      setLoading(false)
-      setTimeout(() => {
-        window.location.href = '/order-success?payment_intent=' + paymentIntentId
-      }, 1200)
+      // Immediate navigate — no "Payment successful…" interstitial.
+      window.location.assign('/order-success?payment_intent=' + paymentIntentId)
       return
     }
 
@@ -291,11 +290,8 @@ export default function Checkout({
       })
       const data = await response.json()
       if (data.success) {
-        setPaymentSuccess(true)
-        setLoading(false)
-        setTimeout(() => {
-          window.location.href = '/order-success?payment_intent=' + paymentIntentId
-        }, 2000)
+        window.location.assign('/order-success?payment_intent=' + paymentIntentId)
+        return
       } else {
         const errorMsg = data.error || 'Payment succeeded but order fulfillment failed. Please contact support.'
         setError(errorMsg)
@@ -318,6 +314,7 @@ export default function Checkout({
   const handlePaymentError = (errorMsg: string) => {
     setError(errorMsg)
     setLoading(false)
+    setCompletingCheckout(false)
   }
 
   const stepIndex = STEPS.findIndex((s) => s.id === step)
@@ -333,15 +330,15 @@ export default function Checkout({
     <div className={`${panelClass} ${className}`.trim()}>
       {!embedded && !wizardMode && <h2 className="text-base font-medium text-neutral-900">Checkout</h2>}
 
-      {!isFulfillmentRetry && !paymentSuccess && !wizardMode && (
+      {!isFulfillmentRetry && !wizardMode && (
         <p className="mt-1 text-sm text-neutral-500">
           Step {stepIndex + 1} of {STEPS.length}: {STEPS[stepIndex]?.label}
         </p>
       )}
 
       {error && !isFulfillmentRetry && step !== 'payment' && (
-        <div className={`rounded-lg bg-red-50 px-3 py-2 ${embedded ? '' : 'mt-4'}`}>
-          <p className="text-sm text-red-700">{error}</p>
+        <div className={`rounded-lg border border-red-300 bg-red-50 px-3 py-2.5 ${embedded ? '' : 'mt-4'}`} role="alert">
+          <p className="text-sm font-medium text-red-900">{error}</p>
         </div>
       )}
 
@@ -396,7 +393,7 @@ export default function Checkout({
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-500">Shipping</span>
-                <span>${shippingCost.toFixed(2)}</span>
+                <span>{shippingCost <= 0 ? 'Included' : `$${shippingCost.toFixed(2)}`}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-neutral-500">Tax</span>
@@ -413,7 +410,7 @@ export default function Checkout({
           </div>
         )}
 
-        {step === 'shipping' && showShippingForm && !paymentSuccess && (
+        {step === 'shipping' && showShippingForm && (
           <form
             className="space-y-4"
             onSubmit={(e) => {
@@ -513,13 +510,13 @@ export default function Checkout({
               </select>
             </div>
             {shippingSubmitAttempted && !shippingValidation.valid && (
-              <p className="text-sm text-red-600" role="status" aria-live="polite">
+              <p className="text-sm font-medium text-red-900" role="status" aria-live="polite">
                 {shippingValidation.error}
               </p>
             )}
             {error && isFulfillmentRetry && (
-              <div className="rounded-lg bg-red-50 px-3 py-2">
-                <p className="text-sm text-red-700">{error}</p>
+              <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2.5" role="alert">
+                <p className="text-sm font-medium text-red-900">{error}</p>
               </div>
             )}
             {isFulfillmentRetry && succeededPaymentIntentId ? (
@@ -552,110 +549,130 @@ export default function Checkout({
           </form>
         )}
 
-        {step === 'payment' && showPaymentForm && !isFulfillmentRetry && !paymentSuccess && (
+        {step === 'payment' && showPaymentForm && !isFulfillmentRetry && (
           <div className="space-y-4 pb-[calc(env(safe-area-inset-bottom)+1rem)] sm:pb-4">
-            <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-              <div className="flex justify-between text-neutral-600">
-                <span>
-                  {isMug ? 'Mug' : 'Tee'}
-                  {quantity > 1 ? ` × ${quantity}` : ''}
-                </span>
-                <span className="tabular-nums">${subtotal.toFixed(2)}</span>
+            {completingCheckout ? (
+              <div className="flex flex-col items-center justify-center rounded-xl border border-neutral-200 bg-white px-4 py-16 text-center">
+                <div
+                  className="mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-900"
+                  role="status"
+                  aria-label="Processing"
+                />
+                <p className="text-base font-semibold text-neutral-900">Processing your order…</p>
+                <p className="mt-1 text-sm text-neutral-500">Hang tight — this only takes a moment.</p>
               </div>
-              <div className="mt-1.5 flex justify-between text-neutral-600">
-                <span>Shipping</span>
-                <span className="tabular-nums">${shippingCost.toFixed(2)}</span>
-              </div>
-              <div className="mt-1.5 flex justify-between text-neutral-600">
-                <span>Tax</span>
-                <span className="tabular-nums">${estimatedTax.toFixed(2)}</span>
-              </div>
-              <div className="mt-2 flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold text-neutral-900">
-                <span>Total</span>
-                <span className="tabular-nums">${totalPrice}</span>
-              </div>
-            </div>
-            {error && (
-              <div className="rounded-lg bg-red-50 px-3 py-2">
-                <p className="text-sm text-red-700">{error}</p>
-              </div>
-            )}
-            {showPaymentForm && !succeededPaymentIntentId && (
+            ) : (
               <>
-                {paymentIntentClientSecret && stripePromise ? (
-                  <Elements
-                    stripe={stripePromise}
-                    options={{
-                      clientSecret: paymentIntentClientSecret,
-                      appearance: {
-                        theme: 'stripe',
-                        variables: {
-                          colorPrimary: '#171717',
-                          colorBackground: '#ffffff',
-                          colorText: '#171717',
-                          colorDanger: '#DC2626',
-                          borderRadius: '8px',
-                        },
-                      },
-                    }}
-                  >
-                    <PaymentOptions
-                      clientSecret={paymentIntentClientSecret}
-                      amount={chargedTotal ?? parseFloat(totalPrice)}
-                      onSuccess={handlePaymentSuccess}
-                      onError={handlePaymentError}
-                      orderDetails={{
-                        designId: design.id,
-                        productType,
-                        imageUrl: design.imageUrl,
-                        title: designTitle,
-                        size: orderSize,
-                        color: selectedColor.value,
-                        quantity,
-                      }}
-                      shippingInfo={shippingInfo}
-                      disabled={loading}
-                    />
-                  </Elements>
-                ) : (
-                  <div className="rounded-lg bg-white px-3 py-4">
-                    <div className="flex items-center gap-3">
-                      <svg
-                        className="h-4 w-4 animate-spin text-neutral-700"
-                        xmlns="http://www.w3.org/2000/svg"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        aria-hidden
-                      >
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path
-                          className="opacity-75"
-                          fill="currentColor"
-                          d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
-                        />
-                      </svg>
-                      <p className="text-sm text-neutral-500">Loading payment…</p>
-                    </div>
-                    {!stripePromise && (
-                      <p className="mt-2 text-sm text-neutral-400">Stripe is not configured in this environment.</p>
-                    )}
+                <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
+                  <div className="flex justify-between text-neutral-600">
+                    <span>
+                      {isMug ? 'Mug' : 'Tee'}
+                      {quantity > 1 ? ` × ${quantity}` : ''}
+                    </span>
+                    <span className="tabular-nums">${subtotal.toFixed(2)}</span>
                   </div>
+                  <div className="mt-1.5 flex justify-between text-neutral-600">
+                    <span>Shipping</span>
+                    <span className="tabular-nums">
+                      {shippingCost <= 0 ? 'Included' : `$${shippingCost.toFixed(2)}`}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex justify-between text-neutral-600">
+                    <span>Tax</span>
+                    <span className="tabular-nums">${estimatedTax.toFixed(2)}</span>
+                  </div>
+                  <div className="mt-2 flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold text-neutral-900">
+                    <span>Total</span>
+                    <span className="tabular-nums">${totalPrice}</span>
+                  </div>
+                </div>
+                {showPaymentForm && !succeededPaymentIntentId && (
+                  <>
+                    {paymentIntentClientSecret && stripePromise ? (
+                      <Elements
+                        stripe={stripePromise}
+                        options={{
+                          clientSecret: paymentIntentClientSecret,
+                          appearance: {
+                            theme: 'stripe',
+                            variables: {
+                              colorPrimary: '#171717',
+                              colorBackground: '#ffffff',
+                              colorText: '#171717',
+                              colorDanger: '#DC2626',
+                              borderRadius: '8px',
+                            },
+                          },
+                        }}
+                      >
+                        <PaymentOptions
+                          clientSecret={paymentIntentClientSecret}
+                          amount={chargedTotal ?? parseFloat(totalPrice)}
+                          onSuccess={handlePaymentSuccess}
+                          onError={handlePaymentError}
+                          orderDetails={{
+                            designId: design.id,
+                            productType,
+                            imageUrl: design.imageUrl,
+                            title: designTitle,
+                            size: orderSize,
+                            color: selectedColor.value,
+                            quantity,
+                          }}
+                          shippingInfo={shippingInfo}
+                          disabled={loading}
+                        />
+                      </Elements>
+                    ) : (
+                      <div className="rounded-lg bg-white px-3 py-4">
+                        <div className="flex items-center gap-3">
+                          <svg
+                            className="h-4 w-4 animate-spin text-neutral-700"
+                            xmlns="http://www.w3.org/2000/svg"
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            aria-hidden
+                          >
+                            <circle
+                              className="opacity-25"
+                              cx="12"
+                              cy="12"
+                              r="10"
+                              stroke="currentColor"
+                              strokeWidth="4"
+                            />
+                            <path
+                              className="opacity-75"
+                              fill="currentColor"
+                              d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                            />
+                          </svg>
+                          <p className="text-sm text-neutral-500">Loading payment…</p>
+                        </div>
+                        {!stripePromise && (
+                          <p className="mt-2 text-sm text-neutral-400">
+                            Stripe is not configured in this environment.
+                          </p>
+                        )}
+                      </div>
+                    )}
+                  </>
+                )}
+                {!wizardMode && (
+                  <button
+                    type="button"
+                    onClick={goBackToShipping}
+                    disabled={loading}
+                    className={secondaryBtnClass}
+                  >
+                    Back
+                  </button>
                 )}
               </>
-            )}
-            {!wizardMode && (
-              <button type="button" onClick={goBackToShipping} disabled={loading} className={secondaryBtnClass}>
-                Back
-              </button>
             )}
           </div>
         )}
 
-        {paymentSuccess && (
-          <div className="rounded-lg bg-white px-3 py-4 text-center text-sm text-neutral-700">
-            Payment successful. Processing your order…
-          </div>
-        )}
       </div>
 
     </div>

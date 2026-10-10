@@ -2,20 +2,22 @@
 
 Private reminders for positioning and messaging—not a spec or roadmap unless noted.
 
+## Orders (Stripe as system of record)
+
+No app DB for v1. Confirmation `orderNumber` (`WSB-…`) lives on PaymentIntent metadata with item/shipping/Printful id. Success page shows summary; `/orders` looks up by number + email via Stripe Search. Full “my orders” account history deferred.
+
 ## Merch drops (primary wedge)
 
-**Idea:** Not a catalog store and not generic dropshipping. Run **timed conviction drops**: ticker/option joke → live mockup → pay → Printful ships. ChatGPT can’t own the buy button.
+**Idea:** The fastest merch brand on the internet — not a catalog. Curated **WSB Drop** collections are the storefront; the ticker generator is secondary. Cadence = whenever a joke is worth printing (same-day is fine), not a fixed weekly schedule.
 
-**Shipped UX (drop pass):**
-- Mockup-first create flow
-- Featured TSLA/$500 landing when no share link
-- Mug default for instant preview; tee one tap away
-- Quick ticker chips + Share (Web Share / copy link)
-- Post-order “Flex this drop” using `lib/drop-share.ts` + sessionStorage
-- Gift line under Buy CTA
-- Sync design render so preview never stays blank waiting on fonts
+**Storefront (drops-first):**
+- `/` — brand + current drop grid → generator CTA
+- `/drop/[slug]` — product + buy (collectible stamp in print file)
+- `/create` — ticker generator (former homepage)
+- Pricing: mug **$24.99 shipped** (shipping bundled); edit `lib/drops.ts` anytime
+- Brand: **stonkmugs** — collectible mark `STONKMUGS` on the art (no drop numbers — ad hoc cadence)
 
-**Ops:** One moment at a time. Post the mockup image + share URL where the joke already lives. Goal: 5 organic paid orders before ads.
+**Ops:** Market event → WSB reaction → ship the mug → Reddit post → unlist when it’s cold. Goal: 5 organic paid orders before ads.
 
 ## Gift / social angle (keep in mind)
 

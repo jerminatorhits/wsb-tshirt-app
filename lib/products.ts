@@ -32,8 +32,13 @@ export function isMugSize(size: string): size is MugSizeKey {
   return size === '11 oz' || size === '15 oz' || size === '20 oz'
 }
 
-export const MUG_BASE_PRICE = 17.99
+/**
+ * Customer-facing mug price is all-in (“$24.99 shipped”).
+ * Shipping is included in the item price so the storefront doesn’t feel like commodity POD.
+ */
+export const MUG_BASE_PRICE = 24.99
 export const SHIRT_BASE_PRICE = 24.99
+/** Tees still charge a ship line; mugs include shipping in the base price. */
 export const SHIPPING_FLAT_RATE = 4.99
 
 export function getProductPricing(productType: ProductType): {
@@ -41,9 +46,18 @@ export function getProductPricing(productType: ProductType): {
   shippingFlatRate: number
 } {
   if (productType === 'mug') {
-    return { basePrice: MUG_BASE_PRICE, shippingFlatRate: SHIPPING_FLAT_RATE }
+    return { basePrice: MUG_BASE_PRICE, shippingFlatRate: 0 }
   }
   return { basePrice: SHIRT_BASE_PRICE, shippingFlatRate: SHIPPING_FLAT_RATE }
+}
+
+/** Storefront label — prefer “shipped” when shipping is bundled. */
+export function formatShippedPrice(productType: ProductType): string {
+  const { basePrice, shippingFlatRate } = getProductPricing(productType)
+  if (shippingFlatRate <= 0) {
+    return `$${basePrice.toFixed(2)} shipped`
+  }
+  return `$${(basePrice + shippingFlatRate).toFixed(2)} shipped`
 }
 
 export function parseProductType(value: string | null | undefined): ProductType {

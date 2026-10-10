@@ -5,8 +5,9 @@ import { fontAnton, fontBebas, fontJetbrains, fontOswald } from '@/lib/design-fo
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'WSB Shirt Lab',
-  description: 'Put your ticker conviction on a tee or mug. Live preview, print to order, share the drop.',
+  title: 'stonkmugs',
+  description:
+    'The market moves. We make the merch. Limited drops, printed to order.',
 }
 
 export default function RootLayout({
@@ -23,18 +24,26 @@ export default function RootLayout({
         <div className="flex h-dvh flex-col overflow-hidden">
           <StagingBanner />
           <header className="shrink-0 border-b border-neutral-200/80">
-            <div className="mx-auto flex w-full max-w-xl items-center justify-between px-4 py-3 sm:px-6">
+            <div className="mx-auto flex w-full max-w-2xl items-center justify-between px-4 py-3 sm:px-6">
               <Link href="/" className="text-sm font-semibold tracking-tight text-neutral-900">
-                WSB Shirt Lab
+                stonkmugs
               </Link>
-              <Link href="/contact" className="text-sm text-neutral-500 hover:text-neutral-900">
-                Contact
-              </Link>
+              <div className="flex items-center gap-4">
+                <Link href="/#drop" className="text-sm text-neutral-500 hover:text-neutral-900">
+                  Drop
+                </Link>
+                <Link href="/create" className="text-sm text-neutral-500 hover:text-neutral-900">
+                  Generator
+                </Link>
+                <Link href="/orders" className="text-sm text-neutral-500 hover:text-neutral-900">
+                  Orders
+                </Link>
+              </div>
             </div>
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
           <footer className="shrink-0 border-t border-neutral-200/80">
-            <div className="mx-auto flex w-full max-w-xl flex-wrap items-center justify-center gap-x-4 gap-y-0.5 px-4 py-2.5 text-xs text-neutral-400 sm:px-6">
+            <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center justify-center gap-x-4 gap-y-0.5 px-4 py-2.5 text-xs text-neutral-400 sm:px-6">
               <Link href="/shipping" className="hover:text-neutral-700">
                 Shipping
               </Link>

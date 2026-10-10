@@ -3,7 +3,9 @@
 import confetti from 'canvas-confetti'
 import { Suspense, useEffect, useRef, useState } from 'react'
 import { useSearchParams } from 'next/navigation'
+import OrderSummaryCard from '@/components/OrderSummaryCard'
 import { dropShareText, loadDropShareAfterOrder, type DropSharePayload } from '@/lib/drop-share'
+import type { OrderSummary } from '@/lib/order-summary'
 
 /** Richer on dark backgrounds (default for this page’s `dark:` card/background). */
 const CONFETTI_COLORS_DARK = ['#22c55e', '#84cc16', '#34d399', '#f43f5e', '#eab308']
@@ -60,8 +62,7 @@ function OrderSuccessContent() {
   const [fulfilling, setFulfilling] = useState(true)
   const [success, setSuccess] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [fulfillmentStatus, setFulfillmentStatus] = useState<'pending' | 'fulfilled' | 'unknown'>('unknown')
-  const [orderId, setOrderId] = useState<string | null>(null)
+  const [order, setOrder] = useState<OrderSummary | null>(null)
   const [dropShare, setDropShare] = useState<DropSharePayload | null>(null)
   const [shareStatus, setShareStatus] = useState<string | null>(null)
 
@@ -80,11 +81,9 @@ function OrderSuccessContent() {
         .then((data) => {
           if (data.success) {
             setSuccess(true)
-            setFulfillmentStatus(data.fulfillmentStatus === 'fulfilled' ? 'fulfilled' : 'pending')
-            if (data.printfulOrderId) setOrderId(data.printfulOrderId)
+            if (data.order) setOrder(data.order as OrderSummary)
           } else {
             setSuccess(true)
-            setFulfillmentStatus('unknown')
           }
         })
         .catch((err) => {
@@ -157,12 +156,12 @@ function OrderSuccessContent() {
     }
   }, [fulfilling, success])
 
-  const handleFlexDrop = async () => {
+  const handleShareDrop = async () => {
     if (!dropShare) return
     const text = dropShareText(dropShare.topic, dropShare.url)
     try {
       if (typeof navigator.share === 'function') {
-        await navigator.share({ title: 'WSB Shirt Lab', text, url: dropShare.url })
+        await navigator.share({ title: 'stonkmugs', text, url: dropShare.url })
         setShareStatus('Shared')
       } else {
         await navigator.clipboard.writeText(dropShare.url)
@@ -183,40 +182,47 @@ function OrderSuccessContent() {
   }
 
   return (
-    <main className="flex items-center justify-center px-4 py-16">
+    <main className="flex items-center justify-center px-4 py-12 sm:py-16">
       <div className="w-full max-w-md text-center">
         {fulfilling ? (
           <>
             <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-neutral-200 border-t-neutral-900"></div>
             <h1 className="text-2xl font-semibold text-neutral-900">Processing your order…</h1>
-            <p className="mt-2 text-sm text-neutral-500">Payment went through. Sending it to print.</p>
+            <p className="mt-2 text-sm text-neutral-500">Hang tight — this only takes a moment.</p>
           </>
         ) : success ? (
           <>
             <h1 className="text-2xl font-semibold text-neutral-900">Order filled</h1>
             <p className="mt-2 text-sm text-neutral-500">
-              Your merch is in production. A confirmation email is on the way.
+              {order?.isDryRun
+                ? 'Test payment succeeded. Nothing was sent to print.'
+                : 'Your merch is in production. A confirmation email is on the way.'}
             </p>
-            {dropShare && (
-              <p className="mt-3 text-sm font-medium text-neutral-700">
+
+            {order ? (
+              <OrderSummaryCard order={order} />
+            ) : dropShare ? (
+              <p className="mt-4 text-sm font-medium text-neutral-700">
                 {dropShare.topic}
                 <span className="font-normal text-neutral-400"> · {dropShare.productLabel}</span>
               </p>
-            )}
-            {fulfillmentStatus !== 'unknown' && (
-              <p className="mt-4 text-sm text-neutral-400">
-                {fulfillmentStatus === 'fulfilled' ? 'Fulfilled' : 'Processing'}
-              </p>
-            )}
-            {orderId && <p className="mt-1 text-xs text-neutral-400">Order ID: {orderId}</p>}
+            ) : null}
+
+            <p className="mt-4 text-sm text-neutral-600">
+              Save this page or your order number for support.{' '}
+              <a href="/orders" className="font-medium text-neutral-900 underline underline-offset-2 hover:text-neutral-700">
+                Look up an order
+              </a>
+            </p>
+
             <div className="mt-6 flex flex-col items-center gap-2">
               {dropShare && (
                 <button
                   type="button"
-                  onClick={() => void handleFlexDrop()}
+                  onClick={() => void handleShareDrop()}
                   className="rh-btn-primary w-auto px-6"
                 >
-                  {shareStatus || 'Flex this drop'}
+                  {shareStatus || 'Share this drop'}
                 </button>
               )}
               <a
@@ -235,12 +241,17 @@ function OrderSuccessContent() {
           <>
             <h1 className="text-2xl font-semibold text-neutral-900">Payment received</h1>
             <p className="mt-2 text-sm text-neutral-500">
-              Payment went through, but we hit a snag processing your order.
+              Payment went through, but we hit a snag loading your order details.
             </p>
             {error && <p className="mt-2 text-sm text-red-600">{error}</p>}
             <p className="mt-4 text-sm text-neutral-500">
               We have your payment and will finish the order manually. Watch for a confirmation email.
             </p>
+            {paymentIntentId && (
+              <p className="mt-2 text-xs text-neutral-400 tabular-nums">
+                Reference: {paymentIntentId.slice(-8).toUpperCase()}
+              </p>
+            )}
             <a href="/" className="rh-btn-primary mt-6 inline-block w-auto px-6">
               Back home
             </a>

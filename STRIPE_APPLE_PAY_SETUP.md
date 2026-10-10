@@ -1,107 +1,37 @@
 # Setting Up Apple Pay with Stripe
 
-## Issue
-Apple Pay is not showing because your domain `trending-tshirt-app.vercel.app` is not registered with Stripe.
+Apple Pay only appears after `stonkmugs.com` is registered and verified with Stripe. Until then, checkout falls back to card entry (what you saw on iPhone).
 
-## Steps to Register Domain
+## Why it failed
 
-### 1. Enable Apple Pay in Stripe Dashboard
+`https://stonkmugs.com/.well-known/apple-developer-merchantid-domain-association` was missing (404). Stripe’s `canMakePayment()` then returns no Apple Pay, so the button never renders.
 
-1. Log in to your [Stripe Dashboard](https://dashboard.stripe.com/)
-2. Navigate to **Settings** → **Payment Methods**
-3. Find **Apple Pay** in the list and click **Configure** or **Manage**
+## One-time setup (Live mode — production)
 
-### 2. Add Your Domain
+Do this in the **same mode as production keys** (Live if `stonkmugs.com` uses `sk_live_` / `pk_live_`).
 
-1. In the Apple Pay settings, click **Add new domain**
-2. Enter your domain: `trending-tshirt-app.vercel.app`
-   - **Important**: Use the exact domain from your Vercel deployment (without `https://` or trailing slashes)
-3. Click **Save**
-
-### 3. Download Verification File
-
-1. After adding the domain, Stripe will provide a verification file
-2. The file will be named something like: `.well-known/apple-developer-merchantid-domain-association`
-3. **Download this file** - you'll need to upload it to your website
-
-### 4. Upload Verification File to Your Website
-
-The verification file needs to be accessible at:
-```
-https://trending-tshirt-app.vercel.app/.well-known/apple-developer-merchantid-domain-association
-```
-
-#### Option A: Using Vercel (Recommended)
-
-1. Create the directory structure in your project:
-   ```bash
-   mkdir -p public/.well-known
+1. Stripe Dashboard → **Settings** → **Payment methods** → **Apple Pay**
+2. **Add domain**: `stonkmugs.com` (no `https://`, no trailing slash)
+3. Deploy this repo so the verification file is live at:
    ```
-
-2. Place the downloaded file in `public/.well-known/` directory
-   - The file should be named exactly: `apple-developer-merchantid-domain-association`
-   - **Important**: No file extension!
-
-3. Commit and push to your repository:
-   ```bash
-   git add public/.well-known/apple-developer-merchantid-domain-association
-   git commit -m "Add Stripe Apple Pay domain verification file"
-   git push
+   https://stonkmugs.com/.well-known/apple-developer-merchantid-domain-association
    ```
+   File path in repo: `public/.well-known/apple-developer-merchantid-domain-association`
+4. In Stripe, click **Verify** next to the domain (green check)
+5. Also add `www.stonkmugs.com` if you ever serve checkout there (we redirect www → apex, but register both if unsure)
+6. Hard-refresh Safari on iPhone → Payment step → **Pay with Apple Pay** should appear above the card form
 
-4. Vercel will automatically deploy the file
+## Test mode (local / staging)
 
-#### Option B: Manual Upload via Vercel Dashboard
+Register the same domain under **Test mode** in Stripe if you test with `sk_test_` keys. Test and Live domain lists are separate.
 
-1. Go to your Vercel project dashboard
-2. Navigate to the project settings
-3. Use the file upload feature to add the verification file to the `.well-known` directory
+## Device checklist
 
-### 5. Verify Domain in Stripe
+- Safari on iPhone/Mac (not Chrome for Apple Pay)
+- At least one card in Apple Wallet
+- Apple Pay enabled in Settings → Wallet & Apple Pay
 
-1. After the file is deployed, go back to Stripe Dashboard
-2. In the Apple Pay settings, find your domain
-3. Click **Verify** next to your domain
-4. Stripe will check if the file is accessible at the correct URL
-5. Once verified, you should see a green checkmark ✅
+## Code notes
 
-### 6. Test Apple Pay
-
-1. Refresh your website
-2. Open the browser console and check for:
-   - `ExpressCheckout: canMakePayment result` should show `applePay: true`
-3. The Apple Pay button should now appear in the Express Checkout section
-
-## Troubleshooting
-
-### File Not Found (404)
-- Make sure the file is in `public/.well-known/` directory
-- Verify the file name is exactly: `apple-developer-merchantid-domain-association` (no extension)
-- Check that the file is accessible at: `https://trending-tshirt-app.vercel.app/.well-known/apple-developer-merchantid-domain-association`
-
-### Still Not Working After Verification
-- Clear your browser cache
-- Make sure you're using Safari (Apple Pay doesn't work in Chrome on macOS)
-- Verify Apple Pay is enabled in your device settings (macOS/iOS)
-- Check that you have at least one card added to Apple Wallet
-
-### Multiple Domains
-If you have multiple domains (e.g., custom domain + Vercel domain), you need to register each one separately in Stripe.
-
-## Additional Notes
-
-- **Test Mode**: Make sure you're using test mode keys for testing. Apple Pay works in test mode.
-- **Production**: When you switch to production keys, you'll need to register your production domain as well.
-- **Custom Domain**: If you add a custom domain later, register that domain separately in Stripe.
-
-## Quick Checklist
-
-- [ ] Apple Pay enabled in Stripe Dashboard → Settings → Payment Methods
-- [ ] Domain added in Stripe Apple Pay settings
-- [ ] Verification file downloaded from Stripe
-- [ ] Verification file uploaded to `public/.well-known/` directory
-- [ ] File accessible at correct URL
-- [ ] Domain verified in Stripe Dashboard
-- [ ] Testing in Safari browser
-- [ ] Apple Pay enabled in device settings
-
+- Checkout collects shipping first, then wallets confirm with that address (`requestShipping: false`)
+- Apple Pay / Google Pay use Stripe Payment Request; card uses Payment Element

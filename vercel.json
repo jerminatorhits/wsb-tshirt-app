@@ -1,0 +1,22 @@
+{
+  "redirects": [
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "wsbtees.com" }],
+      "destination": "https://stonkmugs.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.wsbtees.com" }],
+      "destination": "https://stonkmugs.com/:path*",
+      "permanent": true
+    },
+    {
+      "source": "/:path*",
+      "has": [{ "type": "host", "value": "www.stonkmugs.com" }],
+      "destination": "https://stonkmugs.com/:path*",
+      "permanent": true
+    }
+  ]
+}

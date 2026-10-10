@@ -5,6 +5,7 @@ import { validateShippingAddress } from '@/lib/validate-address'
 import { checkRateLimit } from '@/lib/rate-limit'
 import { getRequestId, jsonWithRequestId, logEvent } from '@/lib/observability'
 import { basicAbuseCheck } from '@/lib/abuse-protection'
+import { generateOrderNumber } from '@/lib/order-number'
 import { getProductPricing, parseProductType } from '@/lib/products'
 
 assertStripeKeysSafeForRuntime()
@@ -144,6 +145,9 @@ export async function POST(request: NextRequest) {
 
     const totalCents = subtotalCents + shippingCents + taxCents
     const metadataImageUrl = await normalizeImageUrlForMetadata(orderDetails?.imageUrl || '')
+    const orderNumber = generateOrderNumber()
+    const receiptEmail =
+      typeof shippingData.email === 'string' ? shippingData.email.trim() : ''
 
     // Create a card-only PaymentIntent for the card form.
     // Apple Pay / Google Pay are still supported through Payment Request (wallet tokens map to card).
@@ -151,6 +155,9 @@ export async function POST(request: NextRequest) {
       amount: totalCents,
       currency: 'usd',
       payment_method_types: ['card'],
+      description: `${orderNumber} · ${orderDetails?.title || productType}`,
+      // Stripe emails an automatic receipt after the PaymentIntent succeeds.
+      ...(receiptEmail ? { receipt_email: receiptEmail } : {}),
       // Request shipping address from Apple Pay/Google Pay
       // This allows express payment methods to provide shipping info automatically
       // Only include shipping if we have address data, otherwise let Apple Pay/Google Pay provide it
@@ -169,6 +176,7 @@ export async function POST(request: NextRequest) {
       // Note: We don't store imageUrl in metadata because it can be very large (base64 images)
       // The imageUrl will be retrieved from the design when fulfilling the order
       metadata: {
+        orderNumber,
         shipping: JSON.stringify(shippingData),
         designId: orderDetails?.designId || '',
         productType,
@@ -177,6 +185,9 @@ export async function POST(request: NextRequest) {
         size: orderDetails?.size || '',
         color: orderDetails?.color || '',
         quantity: orderDetails?.quantity?.toString() || '1',
+        subtotalCents: String(subtotalCents),
+        shippingCents: String(shippingCents),
+        taxCents: String(taxCents),
         fulfillmentStatus: 'pending',
       },
     })

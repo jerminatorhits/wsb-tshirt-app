@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useStripe } from '@stripe/react-stripe-js'
 import PaymentForm from './PaymentForm'
 
@@ -45,11 +45,16 @@ export default function PaymentOptions({
   const [canMakePayment, setCanMakePayment] = useState(false)
   const [paymentMethods, setPaymentMethods] = useState({ applePay: false, googlePay: false })
   const [loading, setLoading] = useState(false)
+  const [walletError, setWalletError] = useState<string | null>(null)
+  const shippingRef = useRef(shippingInfo)
+  shippingRef.current = shippingInfo
 
   const isDisabled = loading || disabledByParent
 
   const wrappedOnError = (msg: string) => {
     setLoading(false)
+    setWalletError(msg)
+    // Keep parent notified for fulfillment retries, but Checkout no longer mirrors this on the payment step.
     onError(msg)
   }
 
@@ -62,16 +67,18 @@ export default function PaymentOptions({
       return
     }
 
+    // Shipping is already collected on the previous step — do not request it again.
+    // requestShipping:true without a shippingaddresschange handler often breaks Apple Pay.
     const pr = stripe.paymentRequest({
       country: 'US',
       currency: 'usd',
       total: {
-        label: orderDetails?.title || 'T-Shirt Order',
+        label: orderDetails?.title || 'Order',
         amount: Math.round(amount * 100),
       },
       requestPayerName: true,
       requestPayerEmail: true,
-      requestShipping: true,
+      requestShipping: false,
     })
 
     pr.canMakePayment()
@@ -97,10 +104,23 @@ export default function PaymentOptions({
 
     pr.on('paymentmethod', async (ev: any) => {
       setLoading(true)
+      const ship = shippingRef.current
       try {
         const { error: confirmError, paymentIntent } = await stripe!.confirmCardPayment(
           clientSecret,
-          { payment_method: ev.paymentMethod.id },
+          {
+            payment_method: ev.paymentMethod.id,
+            shipping: {
+              name: ship.name || ev.payerName || '',
+              address: {
+                line1: ship.address || '',
+                city: ship.city || '',
+                state: ship.state || '',
+                postal_code: ship.zip || '',
+                country: ship.country || 'US',
+              },
+            },
+          },
           { handleActions: false }
         )
 
@@ -110,17 +130,14 @@ export default function PaymentOptions({
         } else {
           ev.complete('success')
 
-          let finalShippingInfo: any = {}
-          if (ev.shippingAddress) {
-            finalShippingInfo = {
-              name: ev.payerName || '',
-              email: ev.payerEmail || '',
-              address: ev.shippingAddress.addressLine?.[0] || '',
-              city: ev.shippingAddress.city || '',
-              state: ev.shippingAddress.region || '',
-              zip: ev.shippingAddress.postalCode || '',
-              country: ev.shippingAddress.country || 'US',
-            }
+          const finalShippingInfo = {
+            name: ship.name || ev.payerName || '',
+            email: ship.email || ev.payerEmail || '',
+            address: ship.address || '',
+            city: ship.city || '',
+            state: ship.state || '',
+            zip: ship.zip || '',
+            country: ship.country || 'US',
           }
 
           if (paymentIntent && paymentIntent.status === 'succeeded') {
@@ -144,20 +161,22 @@ export default function PaymentOptions({
 
   const showExpress = () => {
     if (paymentRequest && !isDisabled) {
+      setWalletError(null)
       paymentRequest.show()
     }
   }
 
   const expressHint = (() => {
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent)
-    const isMacOS = /Macintosh|MacIntel|MacPPC|Mac68K/.test(navigator.userAgent)
-    if (isSafari && isMacOS) {
-      return 'Enable Apple Pay in System Settings and in the Stripe Dashboard.'
+    const ua = navigator.userAgent
+    const isIOS = /iPad|iPhone|iPod/.test(ua)
+    const isSafari = /^((?!chrome|android).)*safari/i.test(ua) || (isIOS && /WebKit/i.test(ua))
+    if (isSafari || isIOS) {
+      return 'Apple Pay is unavailable on this domain until it is verified in Stripe (Settings → Payment methods → Apple Pay). Card checkout still works below.'
     }
-    if (/chrome/i.test(navigator.userAgent) && !/edg/i.test(navigator.userAgent)) {
-      return 'Use Chrome for Google Pay. Apple Pay works in Safari on supported devices.'
+    if (/chrome/i.test(ua) && !/edg/i.test(ua)) {
+      return 'Google Pay needs Chrome plus a verified domain in Stripe. Card checkout still works below.'
     }
-    return 'Wallets work best in Safari (Apple Pay) or Chrome (Google Pay).'
+    return 'Wallets need Safari (Apple Pay) or Chrome (Google Pay) and a Stripe-verified domain. Card checkout still works below.'
   })()
 
   if (!stripe || !clientSecret) {
@@ -170,6 +189,12 @@ export default function PaymentOptions({
         <p className="text-xs text-zinc-500" aria-live="polite">
           Checking for Apple Pay and Google Pay…
         </p>
+      )}
+
+      {walletError && (
+        <div className="rounded-lg border border-red-300 bg-red-50 px-3 py-2.5" role="alert">
+          <p className="text-sm font-medium text-red-900">{walletError}</p>
+        </div>
       )}
 
       {!probing && canMakePayment && (

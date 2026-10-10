@@ -113,6 +113,10 @@ export async function POST(request: NextRequest) {
       success_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/order-success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/?canceled=true`,
       payment_intent_data: {
+        description: title,
+        ...(shipping?.email?.trim()
+          ? { receipt_email: String(shipping.email).trim() }
+          : {}),
         metadata: {
           designId,
           imageUrl: metadataImageUrl,
