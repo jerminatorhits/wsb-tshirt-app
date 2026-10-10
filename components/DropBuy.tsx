@@ -7,7 +7,7 @@ import TShirtPreview from '@/components/TShirtPreview'
 import type { DropCollection, DropProduct } from '@/lib/drops'
 import { dropCollectibleMark } from '@/lib/drops'
 import { COLORS, type GeneratedDesign } from '@/lib/merch'
-import { formatShippedPrice } from '@/lib/products'
+import { formatShippedPrice, getProductPricing } from '@/lib/products'
 import { ensureSloganFontsLoaded, renderSloganToDataURL } from '@/lib/slogan-design'
 
 type Step = 'preview' | 'shipping' | 'payment'
@@ -60,6 +60,7 @@ export default function DropBuy({ drop, product }: Props) {
   }
 
   const priceLabel = formatShippedPrice(product.productType)
+  const { shippingFlatRate } = getProductPricing(product.productType)
 
   if (step === 'shipping' || step === 'payment') {
     if (!design) return null
@@ -175,7 +176,9 @@ export default function DropBuy({ drop, product }: Props) {
           </div>
           <div className="min-w-0 flex-1 text-right">
             <p className="text-lg font-semibold tabular-nums leading-tight">{priceLabel}</p>
-            <p className="text-[11px] text-neutral-500">Shipping included</p>
+            <p className="text-[11px] text-neutral-500">
+              {shippingFlatRate <= 0 ? 'Shipping included' : 'Flat-rate shipping'}
+            </p>
           </div>
           <button
             type="button"
@@ -187,7 +190,7 @@ export default function DropBuy({ drop, product }: Props) {
           </button>
         </div>
         <p className="px-1 text-center text-[11px] text-neutral-400">
-          Stamped STONKMUGS on the print. Gift shipping at checkout.
+          Stamped STONKMUGS on the print.
         </p>
       </div>
     </main>

@@ -24,8 +24,14 @@ export function isStagingRuntime(): boolean {
   return getAppRuntimeEnv() === 'staging'
 }
 
-/** Staging/preview must never use live Stripe keys. */
+/** True while `next build` is collecting/compiling route modules (not a real request). */
+function isNextBuildPhase(): boolean {
+  return process.env.NEXT_PHASE === 'phase-production-build'
+}
+
+/** Staging/preview must never use live Stripe keys (request-time only — never fail `next build`). */
 export function assertStripeKeysSafeForRuntime(): void {
+  if (isNextBuildPhase()) return
   if (!isStagingRuntime()) return
 
   const secret = process.env.STRIPE_SECRET_KEY || ''

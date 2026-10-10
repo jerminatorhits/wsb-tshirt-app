@@ -14,7 +14,7 @@ No app DB for v1. Confirmation `orderNumber` (`WSB-…`) lives on PaymentIntent 
 - `/` — brand + current drop grid → generator CTA
 - `/drop/[slug]` — product + buy (collectible stamp in print file)
 - `/create` — ticker generator (former homepage)
-- Pricing: mug **$24.99 shipped** (shipping bundled); edit `lib/drops.ts` anytime
+- Pricing: mug **$24.99 + $6.99 ship**; edit `lib/products.ts` / catalog anytime
 - Brand: **stonkmugs** — collectible mark `STONKMUGS` on the art (no drop numbers — ad hoc cadence)
 
 **Ops:** Market event → WSB reaction → ship the mug → Reddit post → unlist when it’s cold. Goal: 5 organic paid orders before ads.

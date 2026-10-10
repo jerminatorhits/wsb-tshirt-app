@@ -32,32 +32,30 @@ export function isMugSize(size: string): size is MugSizeKey {
   return size === '11 oz' || size === '15 oz' || size === '20 oz'
 }
 
-/**
- * Customer-facing mug price is all-in (“$24.99 shipped”).
- * Shipping is included in the item price so the storefront doesn’t feel like commodity POD.
- */
 export const MUG_BASE_PRICE = 24.99
 export const SHIRT_BASE_PRICE = 24.99
-/** Tees still charge a ship line; mugs include shipping in the base price. */
+/** Tee shipping line item. */
 export const SHIPPING_FLAT_RATE = 4.99
+/** Mug shipping — covers typical Printful US flat rate (~$6.69). */
+export const MUG_SHIPPING_FLAT_RATE = 6.99
 
 export function getProductPricing(productType: ProductType): {
   basePrice: number
   shippingFlatRate: number
 } {
   if (productType === 'mug') {
-    return { basePrice: MUG_BASE_PRICE, shippingFlatRate: 0 }
+    return { basePrice: MUG_BASE_PRICE, shippingFlatRate: MUG_SHIPPING_FLAT_RATE }
   }
   return { basePrice: SHIRT_BASE_PRICE, shippingFlatRate: SHIPPING_FLAT_RATE }
 }
 
-/** Storefront label — prefer “shipped” when shipping is bundled. */
+/** Storefront price label. */
 export function formatShippedPrice(productType: ProductType): string {
   const { basePrice, shippingFlatRate } = getProductPricing(productType)
   if (shippingFlatRate <= 0) {
     return `$${basePrice.toFixed(2)} shipped`
   }
-  return `$${(basePrice + shippingFlatRate).toFixed(2)} shipped`
+  return `$${basePrice.toFixed(2)} + $${shippingFlatRate.toFixed(2)} ship`
 }
 
 export function parseProductType(value: string | null | undefined): ProductType {

@@ -140,7 +140,7 @@ export async function POST(request: NextRequest) {
       },
       customer_email: shipping.email,
       shipping_address_collection: {
-        allowed_countries: ['US', 'CA', 'GB', 'AU'],
+        allowed_countries: ['US', 'CA', 'GB'],
       },
     })
 
