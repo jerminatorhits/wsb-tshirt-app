@@ -49,13 +49,10 @@ export function getProductPricing(productType: ProductType): {
   return { basePrice: SHIRT_BASE_PRICE, shippingFlatRate: SHIPPING_FLAT_RATE }
 }
 
-/** Storefront price label. */
+/** Storefront product price label (shipping is shown at checkout/payment). */
 export function formatShippedPrice(productType: ProductType): string {
-  const { basePrice, shippingFlatRate } = getProductPricing(productType)
-  if (shippingFlatRate <= 0) {
-    return `$${basePrice.toFixed(2)} shipped`
-  }
-  return `$${basePrice.toFixed(2)} + $${shippingFlatRate.toFixed(2)} ship`
+  const { basePrice } = getProductPricing(productType)
+  return `$${basePrice.toFixed(2)}`
 }
 
 export function parseProductType(value: string | null | undefined): ProductType {

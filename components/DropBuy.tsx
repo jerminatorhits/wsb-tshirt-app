@@ -7,7 +7,7 @@ import TShirtPreview from '@/components/TShirtPreview'
 import type { DropCollection, DropProduct } from '@/lib/drops'
 import { dropCollectibleMark } from '@/lib/drops'
 import { COLORS, type GeneratedDesign } from '@/lib/merch'
-import { formatShippedPrice, getProductPricing } from '@/lib/products'
+import { formatShippedPrice } from '@/lib/products'
 import { ensureSloganFontsLoaded, renderSloganToDataURL } from '@/lib/slogan-design'
 
 type Step = 'preview' | 'shipping' | 'payment'
@@ -23,7 +23,6 @@ export default function DropBuy({ drop, product }: Props) {
   const [step, setStep] = useState<Step>('preview')
   const [quantity, setQuantity] = useState(1)
   const [orderSize, setOrderSize] = useState(product.size)
-  const [checkoutTax, setCheckoutTax] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -54,13 +53,11 @@ export default function DropBuy({ drop, product }: Props) {
   }, [drop, product])
 
   const goToStep = (next: Step) => {
-    if (next === 'preview') setCheckoutTax(0)
     setStep(next)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const priceLabel = formatShippedPrice(product.productType)
-  const { shippingFlatRate } = getProductPricing(product.productType)
 
   if (step === 'shipping' || step === 'payment') {
     if (!design) return null
@@ -73,16 +70,18 @@ export default function DropBuy({ drop, product }: Props) {
         >
           ← Back
         </button>
-        <p className="mt-4 text-sm text-neutral-500">
-          {product.title}
-          {' · '}
-          Mug
-          {' · '}
-          {orderSize}
-          {' · '}
-          Qty {quantity}
-        </p>
-        <div className="mt-1 flex items-baseline justify-between">
+        {step === 'shipping' && (
+          <p className="mt-4 text-sm text-neutral-500">
+            {product.title}
+            {' · '}
+            Mug
+            {' · '}
+            {orderSize}
+            {' · '}
+            Qty {quantity}
+          </p>
+        )}
+        <div className={`${step === 'shipping' ? 'mt-1' : 'mt-4'} flex items-baseline justify-between`}>
           <h1 className="text-2xl font-semibold tracking-tight">
             {step === 'shipping' ? 'Shipping' : 'Payment'}
           </h1>
@@ -94,7 +93,6 @@ export default function DropBuy({ drop, product }: Props) {
             wizardStep={step}
             onWizardStepChange={(next) => goToStep(next)}
             onWizardBack={() => goToStep('preview')}
-            onTaxUpdate={(tax) => setCheckoutTax(tax)}
             design={design}
             designTitle={product.title}
             productType={product.productType}
@@ -105,11 +103,6 @@ export default function DropBuy({ drop, product }: Props) {
             onQuantityChange={setQuantity}
           />
         </div>
-        {checkoutTax > 0 && (
-          <p className="mt-3 text-center text-xs text-neutral-400">
-            Tax calculated at checkout: ${checkoutTax.toFixed(2)}
-          </p>
-        )}
       </main>
     )
   }
@@ -176,9 +169,6 @@ export default function DropBuy({ drop, product }: Props) {
           </div>
           <div className="min-w-0 flex-1 text-right">
             <p className="text-lg font-semibold tabular-nums leading-tight">{priceLabel}</p>
-            <p className="text-[11px] text-neutral-500">
-              {shippingFlatRate <= 0 ? 'Shipping included' : 'Flat-rate shipping'}
-            </p>
           </div>
           <button
             type="button"

@@ -878,14 +878,7 @@ export default function Home() {
                 </div>
                 <div className="min-w-0 flex-1 text-right">
                   <p className="text-lg font-semibold tabular-nums leading-tight">
-                    ${orderTotalPreview}
-                  </p>
-                  <p className="truncate text-[11px] leading-tight text-neutral-500">
-                    {shippingFlatRate <= 0
-                      ? `${formatShippedPrice(productType)}${checkoutTax > 0 ? ` + $${checkoutTax.toFixed(2)} tax` : ''}`
-                      : `$${orderSubtotal.toFixed(2)} + $${shippingFlatRate.toFixed(2)} ship${
-                          checkoutTax > 0 ? ` + $${checkoutTax.toFixed(2)} tax` : ''
-                        }`}
+                    ${orderSubtotal.toFixed(2)}
                   </p>
                 </div>
                 <button
@@ -913,17 +906,19 @@ export default function Home() {
             >
               ← Back
             </button>
-            <p className="mt-4 text-sm text-neutral-500">
-              {generatedDesign.topic}
-              {' · '}
-              {productType === 'mug' ? 'Mug' : 'Tee'}
-              {' · '}
-              {orderSize}
-              {productType !== 'mug' ? ` · ${selectedColor.name}` : ''}
-              {' · '}
-              Qty {quantity}
-            </p>
-            <div className="mt-1 flex items-baseline justify-between">
+            {step === 'shipping' && (
+              <p className="mt-4 text-sm text-neutral-500">
+                {generatedDesign.topic}
+                {' · '}
+                {productType === 'mug' ? 'Mug' : 'Tee'}
+                {' · '}
+                {orderSize}
+                {productType !== 'mug' ? ` · ${selectedColor.name}` : ''}
+                {' · '}
+                Qty {quantity}
+              </p>
+            )}
+            <div className={`${step === 'shipping' ? 'mt-1' : 'mt-4'} flex items-baseline justify-between`}>
               <h1 className="text-2xl font-semibold tracking-tight">
                 {step === 'shipping' ? 'Shipping' : 'Payment'}
               </h1>

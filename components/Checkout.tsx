@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { GeneratedDesign, ColorOption } from '@/lib/merch'
-import { getProductPricing, SHIRT_SIZES, type ProductType } from '@/lib/products'
+import { getProductPricing, isMugSize, SHIRT_SIZES, type ProductType } from '@/lib/products'
+import { mugBlankSrc } from '@/lib/mug-overlay'
 import { validateShippingAddress } from '@/lib/validate-address'
 import PaymentOptions from './PaymentOptions'
 import { Elements } from '@stripe/react-stripe-js'
@@ -77,12 +78,46 @@ export default function Checkout({
     zip: '',
     country: 'US',
   })
+  /** Default: billing matches ship-to (standard checkout pattern). */
+  const [billingSameAsShipping, setBillingSameAsShipping] = useState(true)
+  const [billingInfo, setBillingInfo] = useState({
+    name: '',
+    address: '',
+    city: '',
+    state: '',
+    zip: '',
+    country: 'US',
+  })
   /** After user tries to continue, show field validation (button stays enabled until then). */
   const [shippingSubmitAttempted, setShippingSubmitAttempted] = useState(false)
 
   const shippingValidation = useMemo(
     () => validateShippingAddress(shippingInfo),
     [shippingInfo]
+  )
+
+  const effectiveBillingInfo = useMemo(
+    () =>
+      billingSameAsShipping
+        ? {
+            name: shippingInfo.name,
+            email: shippingInfo.email,
+            address: shippingInfo.address,
+            city: shippingInfo.city,
+            state: shippingInfo.state,
+            zip: shippingInfo.zip,
+            country: shippingInfo.country,
+          }
+        : {
+            name: billingInfo.name,
+            email: shippingInfo.email,
+            address: billingInfo.address,
+            city: billingInfo.city,
+            state: billingInfo.state,
+            zip: billingInfo.zip,
+            country: billingInfo.country,
+          },
+    [billingSameAsShipping, billingInfo, shippingInfo]
   )
 
   const { basePrice, shippingFlatRate: shippingCost } = getProductPricing(productType)
@@ -562,29 +597,187 @@ export default function Checkout({
               </div>
             ) : (
               <>
-                <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3 text-sm">
-                  <div className="flex justify-between text-neutral-600">
-                    <span>
-                      {isMug ? 'Mug' : 'Tee'}
-                      {quantity > 1 ? ` × ${quantity}` : ''}
-                    </span>
-                    <span className="tabular-nums">${subtotal.toFixed(2)}</span>
+                {/* Order review — product + ship-to before pay (confidence, keep it short) */}
+                <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3">
+                  <div className="flex gap-3">
+                    <div className="relative h-20 w-20 shrink-0 overflow-hidden rounded-lg bg-neutral-50 ring-1 ring-neutral-200">
+                      {isMug ? (
+                        <>
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={mugBlankSrc(isMugSize(orderSize) ? orderSize : '11 oz')}
+                            alt=""
+                            className="absolute inset-0 h-full w-full object-contain"
+                          />
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={design.imageUrl}
+                            alt=""
+                            className="absolute left-1/2 top-[46%] z-[1] h-[38%] w-[48%] -translate-x-1/2 -translate-y-1/2 object-contain mix-blend-multiply"
+                          />
+                        </>
+                      ) : (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={design.imageUrl}
+                          alt=""
+                          className="h-full w-full object-contain p-1"
+                        />
+                      )}
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-neutral-900">{designTitle}</p>
+                      <p className="mt-0.5 text-xs text-neutral-500">
+                        {isMug ? 'Mug' : 'Tee'}
+                        {' · '}
+                        {orderSize}
+                        {!isMug ? ` · ${selectedColor.name}` : ''}
+                        {' · '}
+                        Qty {quantity}
+                      </p>
+                      <p className="mt-2 text-sm font-semibold tabular-nums text-neutral-900">
+                        ${subtotal.toFixed(2)}
+                      </p>
+                    </div>
                   </div>
-                  <div className="mt-1.5 flex justify-between text-neutral-600">
-                    <span>Shipping</span>
-                    <span className="tabular-nums">
-                      {shippingCost <= 0 ? 'Included' : `$${shippingCost.toFixed(2)}`}
-                    </span>
+
+                  <div className="mt-3 border-t border-neutral-100 pt-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+                          Ship to
+                        </p>
+                        <p className="mt-1 text-sm font-medium text-neutral-900">{shippingInfo.name}</p>
+                        <p className="text-sm text-neutral-600">{shippingInfo.address}</p>
+                        <p className="text-sm text-neutral-600">
+                          {shippingInfo.city}, {shippingInfo.state} {shippingInfo.zip}
+                        </p>
+                        <p className="mt-0.5 truncate text-xs text-neutral-400">{shippingInfo.email}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={goBackToShipping}
+                        disabled={loading}
+                        className="shrink-0 text-sm font-medium text-neutral-900 underline-offset-2 hover:underline disabled:opacity-40"
+                      >
+                        Change
+                      </button>
+                    </div>
                   </div>
-                  <div className="mt-1.5 flex justify-between text-neutral-600">
-                    <span>Tax</span>
-                    <span className="tabular-nums">${estimatedTax.toFixed(2)}</span>
-                  </div>
-                  <div className="mt-2 flex justify-between border-t border-neutral-200 pt-2 text-base font-semibold text-neutral-900">
-                    <span>Total</span>
-                    <span className="tabular-nums">${totalPrice}</span>
+
+                  <div className="mt-3 space-y-1.5 border-t border-neutral-100 pt-3 text-sm">
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">${subtotal.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Shipping</span>
+                      <span className="tabular-nums">
+                        {shippingCost <= 0 ? 'Included' : `$${shippingCost.toFixed(2)}`}
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-neutral-600">
+                      <span>Tax</span>
+                      <span className="tabular-nums">${estimatedTax.toFixed(2)}</span>
+                    </div>
+                    <div className="flex justify-between pt-1 text-base font-semibold text-neutral-900">
+                      <span>Total</span>
+                      <span className="tabular-nums">${totalPrice}</span>
+                    </div>
                   </div>
                 </div>
+
+                {/* Billing — same as shipping by default; expand only when different */}
+                <div className="rounded-xl border border-neutral-200 bg-white px-4 py-3">
+                  <p className="text-xs font-medium uppercase tracking-wide text-neutral-400">
+                    Billing address
+                  </p>
+                  <label className="mt-2.5 flex cursor-pointer items-start gap-3">
+                    <input
+                      type="checkbox"
+                      checked={billingSameAsShipping}
+                      onChange={(e) => {
+                        const same = e.target.checked
+                        setBillingSameAsShipping(same)
+                        if (!same) {
+                          setBillingInfo({
+                            name: shippingInfo.name,
+                            address: shippingInfo.address,
+                            city: shippingInfo.city,
+                            state: shippingInfo.state,
+                            zip: shippingInfo.zip,
+                            country: shippingInfo.country,
+                          })
+                        }
+                      }}
+                      className="mt-0.5 h-4 w-4 rounded border-neutral-300 text-neutral-900 focus:ring-neutral-900"
+                    />
+                    <span className="text-sm text-neutral-800">
+                      Same as shipping address
+                    </span>
+                  </label>
+                  {!billingSameAsShipping && (
+                    <div className="mt-3 grid grid-cols-2 gap-2 border-t border-neutral-100 pt-3">
+                      <input
+                        type="text"
+                        name="billing-name"
+                        autoComplete="billing name"
+                        placeholder="Full name"
+                        value={billingInfo.name}
+                        onChange={(e) => setBillingInfo({ ...billingInfo, name: e.target.value })}
+                        className={`col-span-2 ${inputClass}`}
+                      />
+                      <input
+                        type="text"
+                        name="billing-address"
+                        autoComplete="billing street-address"
+                        placeholder="Address"
+                        value={billingInfo.address}
+                        onChange={(e) => setBillingInfo({ ...billingInfo, address: e.target.value })}
+                        className={`col-span-2 ${inputClass}`}
+                      />
+                      <input
+                        type="text"
+                        name="billing-city"
+                        autoComplete="billing address-level2"
+                        placeholder="City"
+                        value={billingInfo.city}
+                        onChange={(e) => setBillingInfo({ ...billingInfo, city: e.target.value })}
+                        className={inputClass}
+                      />
+                      <input
+                        type="text"
+                        name="billing-state"
+                        autoComplete="billing address-level1"
+                        placeholder="State"
+                        value={billingInfo.state}
+                        onChange={(e) => setBillingInfo({ ...billingInfo, state: e.target.value })}
+                        className={inputClass}
+                      />
+                      <input
+                        type="text"
+                        name="billing-zip"
+                        autoComplete="billing postal-code"
+                        placeholder="ZIP"
+                        value={billingInfo.zip}
+                        onChange={(e) => setBillingInfo({ ...billingInfo, zip: e.target.value })}
+                        className={inputClass}
+                      />
+                      <select
+                        name="billing-country"
+                        autoComplete="billing country"
+                        value={billingInfo.country}
+                        onChange={(e) => setBillingInfo({ ...billingInfo, country: e.target.value })}
+                        className={inputClass}
+                      >
+                        <option value="US">United States</option>
+                        <option value="CA">Canada</option>
+                        <option value="GB">United Kingdom</option>
+                      </select>
+                    </div>
+                  )}
+                </div>
+
                 {showPaymentForm && !succeededPaymentIntentId && (
                   <>
                     {paymentIntentClientSecret && stripePromise ? (
@@ -600,6 +793,8 @@ export default function Checkout({
                               colorText: '#171717',
                               colorDanger: '#DC2626',
                               borderRadius: '8px',
+                              spacingUnit: '3px',
+                              fontSizeBase: '15px',
                             },
                           },
                         }}
@@ -619,6 +814,7 @@ export default function Checkout({
                             quantity,
                           }}
                           shippingInfo={shippingInfo}
+                          billingInfo={effectiveBillingInfo}
                           disabled={loading}
                         />
                       </Elements>

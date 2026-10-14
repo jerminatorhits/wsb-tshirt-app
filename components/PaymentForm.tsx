@@ -8,6 +8,7 @@ import {
   useElements,
   PaymentElement,
 } from '@stripe/react-stripe-js'
+import { validateShippingAddress } from '@/lib/validate-address'
 
 // Get the publishable key from environment
 const getStripePublishableKey = () => {
@@ -26,6 +27,16 @@ interface PaymentFormProps {
   onSuccess: (paymentIntentId: string, shippingInfo?: any) => void
   onError: (error: string) => void
   shippingInfo: {
+    name: string
+    email: string
+    address: string
+    city: string
+    state: string
+    zip: string
+    country: string
+  }
+  /** Card billing details; falls back to shippingInfo when omitted. */
+  billingInfo?: {
     name: string
     email: string
     address: string
@@ -61,6 +72,7 @@ function CheckoutForm({
   onSuccess,
   onError: _onError,
   shippingInfo,
+  billingInfo,
   orderDetails,
   clientSecret,
   submitDisabled,
@@ -71,6 +83,7 @@ function CheckoutForm({
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const isProcessing = loading || submitDisabled
+  const resolvedBilling = billingInfo ?? shippingInfo
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -83,6 +96,16 @@ function CheckoutForm({
     setErrorMessage(null)
 
     try {
+      const billingCheck = validateShippingAddress({
+        ...resolvedBilling,
+        email: resolvedBilling.email || shippingInfo.email,
+      })
+      if (!billingCheck.valid) {
+        setErrorMessage(billingCheck.error || 'Please check your billing address.')
+        setLoading(false)
+        return
+      }
+
       // First, submit the elements to validate the form
       // This must be called before confirmPayment()
       const { error: submitError } = await elements.submit()
@@ -96,26 +119,25 @@ function CheckoutForm({
       }
 
       // Confirm payment using the existing clientSecret
-      // For express payment methods (Apple Pay, Google Pay), shipping info will come from the payment method
-      // For regular card payments, use the provided shipping info if available
+      // Shipping stays on the PI; billing goes on the payment method.
       const confirmParams: any = {
         return_url: `${window.location.origin}/order-success`,
         payment_method_data: {
           billing_details: {
-            // Provide empty values for fields set to 'never' to avoid errors
             phone: null,
-            email: shippingInfo.email || null,
-            // Only include address if we have shipping info
-            ...(shippingInfo.name && shippingInfo.address ? {
-              name: shippingInfo.name,
-              address: {
-                line1: shippingInfo.address,
-                city: shippingInfo.city,
-                state: shippingInfo.state,
-                postal_code: shippingInfo.zip,
-                country: shippingInfo.country,
-              },
-            } : {}),
+            email: resolvedBilling.email || shippingInfo.email || null,
+            ...(resolvedBilling.name && resolvedBilling.address
+              ? {
+                  name: resolvedBilling.name,
+                  address: {
+                    line1: resolvedBilling.address,
+                    city: resolvedBilling.city,
+                    state: resolvedBilling.state,
+                    postal_code: resolvedBilling.zip,
+                    country: resolvedBilling.country,
+                  },
+                }
+              : {}),
           },
         },
       }
@@ -171,32 +193,29 @@ function CheckoutForm({
   // For now, we'll handle it by ensuring onError always resets loading
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-lg border border-gray-200 dark:border-gray-700">
+    <form onSubmit={handleSubmit} className="space-y-3">
+      <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3">
         <PaymentElement
           options={{
-            layout: {
-              type: 'accordion',
-              defaultCollapsed: false,
-            },
-            // Hide optional fields (email, phone) to reduce noise
-            // Note: We must provide these in confirmParams even when set to 'never'
+            layout: 'tabs',
+            // Shipping already collected — hide billing + Link signup so the form is card-only.
             fields: {
               billingDetails: {
+                name: 'never',
                 email: 'never',
                 phone: 'never',
-                address: 'auto',
+                address: 'never',
               },
             },
-            // When wallets are in PaymentOptions, keep card element focused
-            ...(cardOnlyWallets
-              ? {
-                  wallets: {
-                    applePay: 'never' as const,
-                    googlePay: 'never' as const,
-                  },
-                }
-              : {}),
+            // link is supported at runtime; @stripe/stripe-js@3 types omit it
+            wallets: {
+              applePay: 'auto',
+              googlePay: 'auto',
+              link: 'never',
+            } as { applePay: 'auto'; googlePay: 'auto'; link: 'never' },
+            terms: {
+              card: 'never',
+            },
           }}
         />
       </div>
