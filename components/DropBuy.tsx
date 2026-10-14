@@ -7,7 +7,8 @@ import TShirtPreview from '@/components/TShirtPreview'
 import type { DropCollection, DropProduct } from '@/lib/drops'
 import { dropCollectibleMark } from '@/lib/drops'
 import { COLORS, type GeneratedDesign } from '@/lib/merch'
-import { formatShippedPrice } from '@/lib/products'
+import { formatShippedPrice, isMugSize } from '@/lib/products'
+import { mugBlankSrc } from '@/lib/mug-overlay'
 import { ensureSloganFontsLoaded, renderSloganToDataURL } from '@/lib/slogan-design'
 
 type Step = 'preview' | 'shipping' | 'payment'
@@ -71,17 +72,30 @@ export default function DropBuy({ drop, product }: Props) {
           ← Back
         </button>
         {step === 'shipping' && (
-          <p className="mt-4 text-sm text-neutral-500">
-            {product.title}
-            {' · '}
-            Mug
-            {' · '}
-            {orderSize}
-            {' · '}
-            Qty {quantity}
-          </p>
+          <div className="mt-4 flex items-center gap-3">
+            <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-lg bg-neutral-50 ring-1 ring-neutral-200">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={mugBlankSrc(isMugSize(orderSize) ? orderSize : '11 oz')}
+                alt=""
+                className="absolute inset-0 h-full w-full object-contain"
+              />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={design.imageUrl}
+                alt=""
+                className="absolute left-1/2 top-[46%] z-[1] h-[38%] w-[48%] -translate-x-1/2 -translate-y-1/2 object-contain mix-blend-multiply"
+              />
+            </div>
+            <div className="min-w-0">
+              <p className="truncate text-sm font-medium text-neutral-900">{product.title}</p>
+              <p className="mt-0.5 text-xs text-neutral-500">
+                Mug · {orderSize} · Qty {quantity}
+              </p>
+            </div>
+          </div>
         )}
-        <div className={`${step === 'shipping' ? 'mt-1' : 'mt-4'} flex items-baseline justify-between`}>
+        <div className="mt-4 flex items-baseline justify-between">
           <h1 className="text-2xl font-semibold tracking-tight">
             {step === 'shipping' ? 'Shipping' : 'Payment'}
           </h1>
