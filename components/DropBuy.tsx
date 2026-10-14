@@ -193,8 +193,8 @@ export default function DropBuy({ drop, product }: Props) {
             Buy
           </button>
         </div>
-        <p className="px-1 text-center text-[11px] text-neutral-400">
-          Stamped STONKMUGS on the print.
+        <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">
+          Printed to order · Ships in ~1–2 weeks · Tracking by email
         </p>
       </div>
     </main>

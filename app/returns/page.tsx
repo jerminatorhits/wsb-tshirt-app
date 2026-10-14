@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 export default function ReturnsPage() {
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-8 text-neutral-700">
@@ -7,8 +9,11 @@ export default function ReturnsPage() {
       </p>
       <div className="mt-6 space-y-4 text-sm">
         <p>
-          <strong className="font-medium text-neutral-900">Report window:</strong> Contact us within 14 days of
-          delivery.
+          <strong className="font-medium text-neutral-900">Report window:</strong>{' '}
+          <Link href="/contact" className="text-neutral-900 underline-offset-2 hover:underline">
+            Contact us
+          </Link>{' '}
+          within 14 days of delivery.
         </p>
         <p>
           <strong className="font-medium text-neutral-900">Required:</strong> Order number, a short description, and

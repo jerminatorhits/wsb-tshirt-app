@@ -44,6 +44,12 @@ export default function RootLayout({
           <div className="min-h-0 flex-1 overflow-y-auto">{children}</div>
           <footer className="shrink-0 border-t border-neutral-200/80">
             <div className="mx-auto flex w-full max-w-2xl flex-wrap items-center justify-center gap-x-4 gap-y-0.5 px-4 py-2.5 text-xs text-neutral-400 sm:px-6">
+              <Link href="/about" className="hover:text-neutral-700">
+                About
+              </Link>
+              <Link href="/contact" className="hover:text-neutral-700">
+                Contact
+              </Link>
               <Link href="/shipping" className="hover:text-neutral-700">
                 Shipping
               </Link>

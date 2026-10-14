@@ -890,8 +890,8 @@ export default function Home() {
                   {designGenerating && !generatedDesign ? '…' : 'Buy'}
                 </button>
               </div>
-              <p className="px-1 text-center text-[11px] text-neutral-400">
-                Gift it — ship to a friend at checkout. Printed after you pay.
+              <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">
+                Printed to order · Ships in ~1–2 weeks · Tracking by email
               </p>
             </div>
           </>
