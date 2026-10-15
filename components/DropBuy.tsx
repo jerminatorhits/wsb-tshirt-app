@@ -194,7 +194,7 @@ export default function DropBuy({ drop, product }: Props) {
           </button>
         </div>
         <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">
-          Printed to order · Ships in ~1–2 weeks · Tracking by email
+          Printed to order · 2–5 business days to make · 3–7 to deliver in the US
         </p>
       </div>
     </main>

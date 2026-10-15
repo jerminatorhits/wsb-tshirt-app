@@ -246,7 +246,7 @@ function CheckoutForm({
 
       <div className="space-y-1.5 text-center">
         <p className="text-[11px] leading-relaxed text-neutral-400">
-          Printed to order · Ships in ~1–2 weeks · Tracking by email
+          Printed to order · 2–5 business days to make · 3–7 to deliver in the US
         </p>
         <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
