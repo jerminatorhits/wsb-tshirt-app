@@ -18,6 +18,9 @@ export type SloganRenderOptions = {
   useLightInk?: boolean
 }
 
+/** Hard floor so mug art stays readable on the blank + in thumbnails. */
+const MIN_SLOGAN_PX = 88
+
 function fitSize(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -28,7 +31,7 @@ function fitSize(
   weight: string | number = 400
 ): number {
   let size = Math.round(start)
-  const floor = Math.max(36, Math.round(min))
+  const floor = Math.max(MIN_SLOGAN_PX, Math.round(min))
   while (size > floor) {
     ctx.font = `${weight} ${size}px ${family}`
     if (ctx.measureText(text).width <= maxW) break
@@ -127,11 +130,11 @@ function layoutPoster(
   useLightInk: boolean
 ) {
   const { ink, muted, hair } = inkPair(useLightInk)
-  const maxW = 1420
-  let size = 210
-  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 210, 70, maxW, FONT_ANTON))
+  const maxW = 1480
+  let size = 248
+  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 248, 110, maxW, FONT_ANTON))
   const track = Math.round(size * 0.018)
-  const gap = Math.max(10, Math.round(size * 0.12))
+  const gap = Math.max(12, Math.round(size * 0.12))
   const metrics = lines.map((l) => lineMetrics(ctx, l, size, track))
   const stackH = metrics.reduce(
     (a, m, i) => a + m.ascent + m.descent + (i < metrics.length - 1 ? gap : 0),
@@ -197,11 +200,11 @@ function layoutTicket(
   ctx.lineTo(boxX + boxW - 48, boxY + 100)
   ctx.stroke()
 
-  const maxW = boxW - 140
-  let size = 168
-  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 168, 56, maxW, FONT_ANTON))
+  const maxW = boxW - 120
+  let size = 200
+  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 200, 100, maxW, FONT_ANTON))
   const track = Math.round(size * 0.02)
-  const gap = Math.max(8, Math.round(size * 0.1))
+  const gap = Math.max(10, Math.round(size * 0.1))
   const metrics = lines.map((l) => lineMetrics(ctx, l, size, track))
   const stackH = metrics.reduce(
     (a, m, i) => a + m.ascent + m.descent + (i < metrics.length - 1 ? gap : 0),
@@ -244,11 +247,11 @@ function layoutStamp(
   drawMono(ctx, 'STONKMUGS', cx, cy - r + 90, 28, muted, 'center', 600, 4)
   drawMono(ctx, 'LIVE', cx, cy + r - 70, 26, ink, 'center', 700, 3)
 
-  const maxW = r * 1.35
-  let size = 150
-  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 150, 52, maxW, FONT_ANTON))
+  const maxW = r * 1.4
+  let size = 188
+  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 188, 96, maxW, FONT_ANTON))
   const track = Math.round(size * 0.025)
-  const gap = Math.max(6, Math.round(size * 0.08))
+  const gap = Math.max(10, Math.round(size * 0.1))
   const metrics = lines.map((l) => lineMetrics(ctx, l, size, track))
   const stackH = metrics.reduce(
     (a, m, i) => a + m.ascent + m.descent + (i < metrics.length - 1 ? gap : 0),
@@ -289,20 +292,23 @@ function layoutTape(
   ctx.lineTo(CANVAS - 280, 262)
   ctx.stroke()
 
-  const maxW = 1400
-  const lead = lines[0]
-  const rest = lines.slice(1)
-  const leadSize = fitSize(ctx, lead, 200, 72, maxW, FONT_ANTON)
-  const leadTrack = Math.round(leadSize * 0.02)
-  const leadM = lineMetrics(ctx, lead, leadSize, leadTrack)
-  let y = CANVAS * 0.4
-  drawAnton(ctx, lead, cx, y, leadSize, ink, useLightInk, 'center', leadTrack)
-  y += leadM.descent + 48
+  // All lines share one Anton size so multi-line slogans stay readable (no tiny mono sublines).
+  const maxW = 1480
+  let size = 220
+  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 220, 104, maxW, FONT_ANTON))
+  const track = Math.round(size * 0.02)
+  const gap = Math.max(14, Math.round(size * 0.12))
+  const metrics = lines.map((l) => lineMetrics(ctx, l, size, track))
+  const stackH = metrics.reduce(
+    (a, m, i) => a + m.ascent + m.descent + (i < metrics.length - 1 ? gap : 0),
+    0
+  )
+  let cursor = CANVAS * 0.42 - stackH / 2
 
-  for (const line of rest) {
-    const size = fitSize(ctx, line, 72, 40, maxW, FONT_MONO, 700)
-    drawMono(ctx, line, cx, y + size * 0.75, size, muted, 'center', 700, 2)
-    y += size + 28
+  for (let i = 0; i < lines.length; i++) {
+    const baseline = cursor + metrics[i].ascent
+    drawAnton(ctx, lines[i], cx, baseline, size, ink, useLightInk, 'center', track)
+    cursor += metrics[i].ascent + metrics[i].descent + (i < lines.length - 1 ? gap : 0)
   }
 
   ctx.strokeStyle = hair
@@ -331,11 +337,11 @@ function layoutLedger(
   ctx.lineTo(CANVAS - 200, 250)
   ctx.stroke()
 
-  const maxW = 1400
-  let size = 180
-  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 180, 60, maxW, FONT_ANTON))
+  const maxW = 1480
+  let size = 220
+  for (const line of lines) size = Math.min(size, fitSize(ctx, line, 220, 104, maxW, FONT_ANTON))
   const track = Math.round(size * 0.02)
-  const gap = Math.max(10, Math.round(size * 0.11))
+  const gap = Math.max(12, Math.round(size * 0.11))
   const metrics = lines.map((l) => lineMetrics(ctx, l, size, track))
   let cursor = 340
 

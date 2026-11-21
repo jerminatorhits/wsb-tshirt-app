@@ -15,8 +15,8 @@ export default function AboutPage() {
         </p>
         <p>
           <strong className="font-medium text-neutral-900">Shipping:</strong> Most orders are produced within
-          2–5 business days, then US delivery usually takes 3–7 business days after that. You get tracking by
-          email when it ships.
+          2–5 business days. US delivery usually takes 3–7 business days after production. Tracking is sent by
+          email once your order ships. Order by Dec 10 for Christmas delivery.
         </p>
         <p>
           Questions?{' '}

@@ -7,7 +7,9 @@ import {
   useStripe,
   useElements,
   PaymentElement,
+  ExpressCheckoutElement,
 } from '@stripe/react-stripe-js'
+import { TRUST_LINE } from '@/lib/fulfillment-copy'
 import { validateShippingAddress } from '@/lib/validate-address'
 
 // Get the publishable key from environment
@@ -82,8 +84,76 @@ function CheckoutForm({
   const elements = useElements()
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
+  const [expressVisible, setExpressVisible] = useState(false)
   const isProcessing = loading || submitDisabled
   const resolvedBilling = billingInfo ?? shippingInfo
+
+  const billingDetailsForConfirm = () => ({
+    phone: null as null,
+    email: resolvedBilling.email || shippingInfo.email || null,
+    ...(resolvedBilling.name && resolvedBilling.address
+      ? {
+          name: resolvedBilling.name,
+          address: {
+            line1: resolvedBilling.address,
+            city: resolvedBilling.city,
+            state: resolvedBilling.state,
+            postal_code: resolvedBilling.zip,
+            country: resolvedBilling.country,
+          },
+        }
+      : {}),
+  })
+
+  const finishSucceeded = (paymentIntent: { id: string; shipping?: any; charges?: any }) => {
+    let finalShippingInfo = shippingInfo
+    if (paymentIntent.shipping) {
+      finalShippingInfo = {
+        name: paymentIntent.shipping.name || shippingInfo.name || '',
+        email: shippingInfo.email,
+        address: paymentIntent.shipping.address?.line1 || shippingInfo.address || '',
+        city: paymentIntent.shipping.address?.city || shippingInfo.city || '',
+        state: paymentIntent.shipping.address?.state || shippingInfo.state || '',
+        zip: paymentIntent.shipping.address?.postal_code || shippingInfo.zip || '',
+        country: paymentIntent.shipping.address?.country || shippingInfo.country || 'US',
+      }
+    }
+    if ((paymentIntent as any).charges?.data?.[0]?.billing_details?.email) {
+      finalShippingInfo.email =
+        (paymentIntent as any).charges?.data?.[0]?.billing_details?.email || ''
+    }
+    onSuccess(paymentIntent.id, finalShippingInfo)
+  }
+
+  const handleExpressConfirm = async () => {
+    if (!stripe || !elements) return
+    setLoading(true)
+    setErrorMessage(null)
+    try {
+      const { error, paymentIntent } = await stripe.confirmPayment({
+        elements,
+        clientSecret,
+        confirmParams: {
+          return_url: `${window.location.origin}/order-success`,
+          payment_method_data: {
+            billing_details: billingDetailsForConfirm(),
+          },
+        },
+        redirect: 'if_required',
+      })
+      if (error) {
+        setErrorMessage(error.message || 'Payment failed')
+        setLoading(false)
+      } else if (paymentIntent && paymentIntent.status === 'succeeded') {
+        finishSucceeded(paymentIntent)
+      } else {
+        setLoading(false)
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An error occurred')
+      setLoading(false)
+    }
+  }
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault()
@@ -118,67 +188,23 @@ function CheckoutForm({
         return
       }
 
-      // Confirm payment using the existing clientSecret
-      // Shipping stays on the PI; billing goes on the payment method.
-      const confirmParams: any = {
-        return_url: `${window.location.origin}/order-success`,
-        payment_method_data: {
-          billing_details: {
-            phone: null,
-            email: resolvedBilling.email || shippingInfo.email || null,
-            ...(resolvedBilling.name && resolvedBilling.address
-              ? {
-                  name: resolvedBilling.name,
-                  address: {
-                    line1: resolvedBilling.address,
-                    city: resolvedBilling.city,
-                    state: resolvedBilling.state,
-                    postal_code: resolvedBilling.zip,
-                    country: resolvedBilling.country,
-                  },
-                }
-              : {}),
-          },
-        },
-      }
-
       const { error, paymentIntent } = await stripe.confirmPayment({
         elements,
         clientSecret,
-        confirmParams,
+        confirmParams: {
+          return_url: `${window.location.origin}/order-success`,
+          payment_method_data: {
+            billing_details: billingDetailsForConfirm(),
+          },
+        },
         redirect: 'if_required',
       })
 
       if (error) {
-        // One banner above Pay — do not also push to Checkout (that duplicated the message).
         setErrorMessage(error.message || 'Payment failed')
         setLoading(false)
       } else if (paymentIntent && paymentIntent.status === 'succeeded') {
-        // Extract shipping info from payment intent if available (from Apple Pay/Google Pay)
-        // Express payment methods like Apple Pay/Google Pay will populate paymentIntent.shipping
-        let finalShippingInfo = shippingInfo
-        
-        if (paymentIntent.shipping) {
-          finalShippingInfo = {
-            name: paymentIntent.shipping.name || shippingInfo.name || '',
-            email: shippingInfo.email, // Email typically comes from billing details
-            address: paymentIntent.shipping.address?.line1 || shippingInfo.address || '',
-            city: paymentIntent.shipping.address?.city || shippingInfo.city || '',
-            state: paymentIntent.shipping.address?.state || shippingInfo.state || '',
-            zip: paymentIntent.shipping.address?.postal_code || shippingInfo.zip || '',
-            country: paymentIntent.shipping.address?.country || shippingInfo.country || 'US',
-          }
-        }
-
-        // Get email from payment intent if available
-        // Note: charges property may not be available in all PaymentIntent objects
-        // We'll get email from billing_details if available
-        if ((paymentIntent as any).charges?.data?.[0]?.billing_details?.email) {
-          finalShippingInfo.email = (paymentIntent as any).charges?.data?.[0]?.billing_details?.email || ''
-        }
-
-        // Payment succeeded - call onSuccess; keep loading true until fulfillment completes or errors (parent will call onError)
-        onSuccess(paymentIntent.id, finalShippingInfo)
+        finishSucceeded(paymentIntent)
       } else {
         setLoading(false)
       }
@@ -194,6 +220,47 @@ function CheckoutForm({
 
   return (
     <form onSubmit={handleSubmit} className="space-y-3">
+      {/* Apple Pay / Google Pay — Express Checkout above card (shipping already collected). */}
+      {!cardOnlyWallets && (
+        <div className={expressVisible ? 'space-y-3' : 'hidden'}>
+          <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3">
+            <ExpressCheckoutElement
+              options={{
+                buttonType: { applePay: 'buy', googlePay: 'buy' },
+                wallets: {
+                  applePay: 'always',
+                  googlePay: 'always',
+                },
+              }}
+              onReady={(event) => {
+                const methods = event.availablePaymentMethods
+                setExpressVisible(Boolean(methods?.applePay || methods?.googlePay))
+              }}
+              onClick={({ resolve }) => {
+                resolve({
+                  emailRequired: false,
+                  phoneNumberRequired: false,
+                  shippingAddressRequired: false,
+                  billingAddressRequired: false,
+                  lineItems: [
+                    {
+                      name: orderDetails?.title || 'Order',
+                      amount: Math.round(amount * 100),
+                    },
+                  ],
+                })
+              }}
+              onConfirm={() => {
+                void handleExpressConfirm()
+              }}
+            />
+          </div>
+          {expressVisible && (
+            <p className="text-center text-xs text-neutral-400">or pay with card</p>
+          )}
+        </div>
+      )}
+
       <div className="rounded-xl border border-neutral-200 bg-white px-3 py-3">
         <PaymentElement
           options={{
@@ -207,12 +274,12 @@ function CheckoutForm({
                 address: 'never',
               },
             },
-            // link is supported at runtime; @stripe/stripe-js@3 types omit it
+            // Wallets live in ExpressCheckoutElement above (avoid duplicates).
             wallets: {
-              applePay: 'auto',
-              googlePay: 'auto',
+              applePay: 'never',
+              googlePay: 'never',
               link: 'never',
-            } as { applePay: 'auto'; googlePay: 'auto'; link: 'never' },
+            } as { applePay: 'never'; googlePay: 'never'; link: 'never' },
             terms: {
               card: 'never',
             },
@@ -245,9 +312,7 @@ function CheckoutForm({
       </button>
 
       <div className="space-y-1.5 text-center">
-        <p className="text-[11px] leading-relaxed text-neutral-400">
-          Printed to order · 2–5 business days to make · 3–7 to deliver in the US
-        </p>
+        <p className="text-[11px] leading-relaxed text-neutral-400">{TRUST_LINE}</p>
         <div className="flex items-center justify-center gap-2 text-xs text-neutral-500">
           <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden>
             <path

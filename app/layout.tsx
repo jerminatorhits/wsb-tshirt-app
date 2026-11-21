@@ -32,6 +32,9 @@ export default function RootLayout({
                 <Link href="/#drop" className="text-sm text-neutral-500 hover:text-neutral-900">
                   Drop
                 </Link>
+              <Link href="/gift" className="text-sm text-neutral-500 hover:text-neutral-900">
+                  Gift
+                </Link>
                 <Link href="/create" className="text-sm text-neutral-500 hover:text-neutral-900">
                   Generator
                 </Link>

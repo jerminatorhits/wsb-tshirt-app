@@ -6,8 +6,16 @@ import Checkout from '@/components/Checkout'
 import TShirtPreview from '@/components/TShirtPreview'
 import type { DropCollection, DropProduct } from '@/lib/drops'
 import { dropCollectibleMark } from '@/lib/drops'
+import { dropAvailabilityLine, isDropLive } from '@/lib/drop-window'
+import {
+  CHRISTMAS_ORDER_BY_LABEL,
+  formatPriceWithShipping,
+  formatShippingOnly,
+  isBeforeChristmasCutoff,
+  TRUST_LINE,
+} from '@/lib/fulfillment-copy'
 import { COLORS, type GeneratedDesign } from '@/lib/merch'
-import { formatShippedPrice, isMugSize } from '@/lib/products'
+import { isMugSize } from '@/lib/products'
 import { mugBlankSrc } from '@/lib/mug-overlay'
 import { ensureSloganFontsLoaded, renderSloganToDataURL } from '@/lib/slogan-design'
 
@@ -24,6 +32,9 @@ export default function DropBuy({ drop, product }: Props) {
   const [step, setStep] = useState<Step>('preview')
   const [quantity, setQuantity] = useState(1)
   const [orderSize, setOrderSize] = useState(product.size)
+  const live = isDropLive(drop)
+  const availability = dropAvailabilityLine(drop)
+  const priceLabel = formatPriceWithShipping(product.productType)
 
   useEffect(() => {
     let cancelled = false
@@ -57,8 +68,6 @@ export default function DropBuy({ drop, product }: Props) {
     setStep(next)
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
-
-  const priceLabel = formatShippedPrice(product.productType)
 
   if (step === 'shipping' || step === 'payment') {
     if (!design) return null
@@ -133,7 +142,10 @@ export default function DropBuy({ drop, product }: Props) {
         >
           {product.title}
         </h1>
-        <p className="mt-1 text-sm text-neutral-500">{priceLabel} · Mug</p>
+        <p className="mt-1 text-sm text-neutral-500">{priceLabel}</p>
+        {availability && (
+          <p className="mt-1 text-xs font-medium text-neutral-700">{availability}</p>
+        )}
         <p className="mt-2 text-sm text-neutral-600">{product.blurb}</p>
       </div>
 
@@ -159,12 +171,39 @@ export default function DropBuy({ drop, product }: Props) {
           )}
         </div>
 
+        <div className="shrink-0 space-y-2 rounded-xl border border-neutral-200 bg-white px-3 py-3 text-xs leading-relaxed text-neutral-600">
+          <p>
+            <span className="font-medium text-neutral-900">Details:</span> White glossy ceramic mug ·{' '}
+            {orderSize} · dishwasher & microwave safe
+          </p>
+          <p>
+            <span className="font-medium text-neutral-900">Shipping:</span>{' '}
+            {formatShippingOnly(product.productType)} · {TRUST_LINE}
+          </p>
+          {isBeforeChristmasCutoff() && (
+            <p>
+              <span className="font-medium text-neutral-900">Holiday:</span> Order by{' '}
+              {CHRISTMAS_ORDER_BY_LABEL} for Christmas delivery.{' '}
+              <Link href="/gift" className="underline-offset-2 hover:underline">
+                Gift info
+              </Link>
+            </p>
+          )}
+          <p>
+            <span className="font-medium text-neutral-900">Returns:</span> Custom prints are final sale
+            except damage or defects.{' '}
+            <Link href="/returns" className="underline-offset-2 hover:underline">
+              Policy
+            </Link>
+          </p>
+        </div>
+
         <div className="flex shrink-0 items-center gap-3 rounded-xl border border-neutral-200 bg-white px-3 py-2.5">
           <div className="flex items-center gap-1.5">
             <button
               type="button"
               onClick={() => setQuantity(Math.max(1, quantity - 1))}
-              disabled={quantity <= 1}
+              disabled={quantity <= 1 || !live}
               className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
               aria-label="Decrease quantity"
             >
@@ -174,7 +213,7 @@ export default function DropBuy({ drop, product }: Props) {
             <button
               type="button"
               onClick={() => setQuantity(Math.min(10, quantity + 1))}
-              disabled={quantity >= 10}
+              disabled={quantity >= 10 || !live}
               className="h-9 w-9 rounded-md border border-neutral-200 text-neutral-700 hover:border-neutral-400 disabled:opacity-40"
               aria-label="Increase quantity"
             >
@@ -182,20 +221,21 @@ export default function DropBuy({ drop, product }: Props) {
             </button>
           </div>
           <div className="min-w-0 flex-1 text-right">
-            <p className="text-lg font-semibold tabular-nums leading-tight">{priceLabel}</p>
+            <p className="text-lg font-semibold tabular-nums leading-tight">
+              {formatPriceWithShipping(product.productType).split(' + ')[0]}
+            </p>
+            <p className="text-[11px] text-neutral-400">{formatShippingOnly(product.productType)}</p>
           </div>
           <button
             type="button"
             onClick={() => goToStep('shipping')}
-            disabled={!design}
+            disabled={!design || !live}
             className="rounded-md bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white hover:bg-neutral-800 disabled:cursor-not-allowed disabled:opacity-40"
           >
-            Buy
+            {live ? 'Buy' : 'Ended'}
           </button>
         </div>
-        <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">
-          Printed to order · 2–5 business days to make · 3–7 to deliver in the US
-        </p>
+        <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">{TRUST_LINE}</p>
       </div>
     </main>
   )

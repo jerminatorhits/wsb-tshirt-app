@@ -15,6 +15,10 @@ export default function ShippingPage() {
         <p>
           <strong className="font-medium text-neutral-900">Tracking:</strong> Sent by email once your order ships.
         </p>
+        <p>
+          <strong className="font-medium text-neutral-900">Holiday:</strong> Order by Dec 10 for Christmas
+          delivery (US).
+        </p>
       </div>
     </main>
   )

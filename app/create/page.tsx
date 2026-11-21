@@ -24,6 +24,8 @@ import {
   parseProductType,
   type ProductType,
 } from '@/lib/products'
+import { TRUST_LINE, formatShippingOnly } from '@/lib/fulfillment-copy'
+import { sanitizeTickerInput, tickerGuardMessage } from '@/lib/ticker-guard'
 
 /** Featured drop shown when someone lands with no share link — always a buyable preview. */
 const FEATURED_DROP = { ticker: 'TSLA', price: '500' } as const
@@ -113,7 +115,8 @@ export default function Home() {
     window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
-  const cleanedTicker = ticker.trim().toUpperCase()
+  const cleanedTicker = sanitizeTickerInput(ticker)
+  const tickerBlockedMessage = tickerGuardMessage(cleanedTicker)
 
   useEffect(() => {
     if (typeof window === 'undefined') return
@@ -132,7 +135,7 @@ export default function Home() {
     const qProduct = qProductParam ? parseProductType(qProductParam) : 'mug'
 
     if (qTicker) {
-      setTicker(qTicker.toUpperCase().slice(0, 6))
+      setTicker(sanitizeTickerInput(qTicker))
       setTickerPrefilledFromUrl(true)
     } else {
       // Land on a live drop so the mockup is never empty.
@@ -539,7 +542,8 @@ export default function Home() {
   }
 
   const parsedForm = parseDesignForm()
-  const canCheckout = parsedForm.ok && Boolean(generatedDesign)
+  const canCheckout =
+    parsedForm.ok && Boolean(generatedDesign) && !tickerBlockedMessage
   const compactToggle = (active: boolean) =>
     `rounded-md border px-2.5 py-2 text-sm transition ${active ? 'rh-toggle-active' : 'rh-toggle-inactive'}`
 
@@ -716,7 +720,7 @@ export default function Home() {
                       value={ticker}
                       onChange={(e) => {
                         setTickerPrefilledFromUrl(false)
-                        setTicker(e.target.value.toUpperCase())
+                        setTicker(sanitizeTickerInput(e.target.value))
                         setTickerMenuOpen(true)
                       }}
                       onFocus={() => {
@@ -733,6 +737,9 @@ export default function Home() {
                       aria-expanded={tickerMenuOpen}
                       aria-controls="ticker-suggestions"
                     />
+                    {tickerBlockedMessage && cleanedTicker && (
+                      <p className="mt-1 text-[11px] text-red-700">{tickerBlockedMessage}</p>
+                    )}
                     {tickerMenuOpen && ticker && (tickerSuggestions.length > 0 || tickerSuggestionLoading) && (
                       <div
                         id="ticker-suggestions"
@@ -891,7 +898,7 @@ export default function Home() {
                 </button>
               </div>
               <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">
-                Printed to order · 2–5 business days to make · 3–7 to deliver in the US
+                {TRUST_LINE} · {formatShippingOnly(productType)}
               </p>
             </div>
           </>
