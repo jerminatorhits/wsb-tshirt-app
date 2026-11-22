@@ -5,6 +5,7 @@ import { CURRENT_DROP } from '@/lib/drops'
 import { dropAvailabilityLine, isDropLive } from '@/lib/drop-window'
 import {
   CHRISTMAS_ORDER_BY_LABEL,
+  crashWeekPromoLine,
   formatPriceWithShipping,
   isBeforeChristmasCutoff,
 } from '@/lib/fulfillment-copy'
@@ -17,17 +18,31 @@ export default function HomePage() {
   const availability = dropAvailabilityLine(drop)
   const live = isDropLive(drop)
   const showHoliday = isBeforeChristmasCutoff()
+  const promoLine = crashWeekPromoLine()
 
   return (
     <main className="mx-auto max-w-2xl px-4 pb-10 pt-6 sm:px-6 sm:pt-8">
-      {showHoliday && (
-        <p className="mb-4 rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700">
-          Order by <span className="font-medium text-neutral-900">{CHRISTMAS_ORDER_BY_LABEL}</span> for
-          Christmas delivery.{' '}
-          <Link href="/gift" className="font-medium text-neutral-900 underline-offset-2 hover:underline">
-            Gift guide
-          </Link>
-        </p>
+      {(promoLine || showHoliday) && (
+        <div className="mb-4 space-y-2">
+          {promoLine && (
+            <p className="rounded-lg border border-neutral-900 bg-neutral-900 px-3 py-2.5 text-sm text-white">
+              Crash week special: <span className="font-semibold">{promoLine}</span>
+              {' · '}
+              <a href="#drop" className="underline underline-offset-2">
+                Pick a mug
+              </a>
+            </p>
+          )}
+          {showHoliday && (
+            <p className="rounded-lg border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700">
+              Order by <span className="font-medium text-neutral-900">{CHRISTMAS_ORDER_BY_LABEL}</span> for
+              Christmas delivery.{' '}
+              <Link href="/gift" className="font-medium text-neutral-900 underline-offset-2 hover:underline">
+                Gift guide
+              </Link>
+            </p>
+          )}
+        </div>
       )}
 
       <header className="border-b border-neutral-200 pb-5">
@@ -62,9 +77,7 @@ export default function HomePage() {
                 </span>
               )}
             </h2>
-            {availability && (
-              <p className="mt-1 text-xs text-neutral-500">{availability}</p>
-            )}
+            {availability && <p className="mt-1 text-xs text-neutral-500">{availability}</p>}
           </div>
         </div>
 
@@ -79,6 +92,19 @@ export default function HomePage() {
             </div>
           </div>
         )}
+      </section>
+
+      <section className="mt-8 rounded-xl border border-neutral-200 bg-white px-4 py-4">
+        <p className="text-sm font-medium text-neutral-900">Buying for a friend?</p>
+        <p className="mt-1 text-sm text-neutral-600">
+          Ship straight to them at checkout. Same price, no extra steps.
+        </p>
+        <Link
+          href="/gift"
+          className="mt-3 inline-flex text-sm font-medium text-neutral-900 underline-offset-2 hover:underline"
+        >
+          Gift guide →
+        </Link>
       </section>
 
       <section className="mt-8 border-t border-neutral-200 pt-6">

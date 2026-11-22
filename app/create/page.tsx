@@ -25,6 +25,7 @@ import {
   type ProductType,
 } from '@/lib/products'
 import { TRUST_LINE, formatShippingOnly } from '@/lib/fulfillment-copy'
+import { applyShippingPromo } from '@/lib/promo'
 import { sanitizeTickerInput, tickerGuardMessage } from '@/lib/ticker-guard'
 
 /** Featured drop shown when someone lands with no share link — always a buyable preview. */
@@ -107,7 +108,8 @@ export default function Home() {
 
   const { basePrice, shippingFlatRate } = getProductPricing(productType)
   const orderSubtotal = basePrice * quantity
-  const orderTotalPreview = (orderSubtotal + shippingFlatRate + checkoutTax).toFixed(2)
+  const orderShipping = applyShippingPromo(Math.round(shippingFlatRate * 100)) / 100
+  const orderTotalPreview = (orderSubtotal + orderShipping + checkoutTax).toFixed(2)
 
   const goToStep = (next: AppStep) => {
     if (next === 'create') setCheckoutTax(0)

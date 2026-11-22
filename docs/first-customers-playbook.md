@@ -3,7 +3,10 @@
 Goal: **1–5 paid orders** this week without ads.  
 Site: https://stonkmugs.com  
 Gift page: https://stonkmugs.com/gift  
-Drop ends: Dec 1 (PT)
+Drop ends: Dec 1 (PT)  
+**Live offer: free US shipping through Dec 1** (no code — automatic at checkout)
+
+**Fastest path to sale #1:** buy one yourself (or gift one to a friend tonight). That validates checkout, gives you a real photo, and removes “zero sales” anxiety. Then send 5 texts.
 
 **Rule:** lead with the joke/image. Soft-link once. Never paste the same “buy my shop” wall everywhere. Read each Reddit community’s self-promo rules before posting.
 

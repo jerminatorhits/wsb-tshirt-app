@@ -7,6 +7,7 @@ import { getRequestId, jsonWithRequestId, logEvent } from '@/lib/observability'
 import { basicAbuseCheck } from '@/lib/abuse-protection'
 import { generateOrderNumber } from '@/lib/order-number'
 import { getProductPricing, parseProductType } from '@/lib/products'
+import { applyShippingPromo } from '@/lib/promo'
 
 assertStripeKeysSafeForRuntime()
 
@@ -91,7 +92,7 @@ export async function POST(request: NextRequest) {
     const { basePrice, shippingFlatRate } = getProductPricing(productType)
     const quantity = Math.max(1, Math.floor(Number(orderDetails?.quantity || 1)))
     const subtotalCents = Math.round(basePrice * 100) * quantity
-    const shippingCents = Math.round(shippingFlatRate * 100)
+    const shippingCents = applyShippingPromo(Math.round(shippingFlatRate * 100))
 
     let taxCents = 0
     if (shippingData.address) {

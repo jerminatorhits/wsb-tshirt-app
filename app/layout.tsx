@@ -7,7 +7,20 @@ import './globals.css'
 export const metadata: Metadata = {
   title: 'stonkmugs',
   description:
-    'The market moves. We make the merch. Limited drops, printed to order.',
+    'Crash week trader mugs. Correction energy, free US shipping through Dec 1. Printed to order.',
+  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || 'https://stonkmugs.com'),
+  openGraph: {
+    title: 'stonkmugs',
+    description: 'Crash week trader mugs. Free US shipping through Dec 1.',
+    url: '/',
+    siteName: 'stonkmugs',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary',
+    title: 'stonkmugs',
+    description: 'Crash week trader mugs. Free US shipping through Dec 1.',
+  },
 }
 
 export default function RootLayout({

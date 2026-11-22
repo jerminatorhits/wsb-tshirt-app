@@ -1,15 +1,17 @@
 import Link from 'next/link'
 import {
   CHRISTMAS_ORDER_BY_LABEL,
+  crashWeekPromoLine,
   isBeforeChristmasCutoff,
   PROCESSING_COPY,
   US_DELIVERY_COPY,
+  formatPriceWithShipping,
 } from '@/lib/fulfillment-copy'
-import { formatPriceWithShipping } from '@/lib/fulfillment-copy'
 
 export default function GiftPage() {
   const priceLabel = formatPriceWithShipping('mug')
   const beforeCutoff = isBeforeChristmasCutoff()
+  const promoLine = crashWeekPromoLine()
 
   return (
     <main className="mx-auto w-full max-w-lg px-4 py-8 text-neutral-700">
@@ -18,6 +20,11 @@ export default function GiftPage() {
         Ship a mug to someone else at checkout. White glossy ceramic, printed to order, stamped
         STONKMUGS on the print.
       </p>
+      {promoLine && (
+        <p className="mt-3 rounded-lg border border-neutral-900 bg-neutral-900 px-3 py-2 text-sm text-white">
+          {promoLine}
+        </p>
+      )}
 
       <div className="mt-6 rounded-xl border border-neutral-200 bg-white px-4 py-4 text-sm">
         {beforeCutoff ? (

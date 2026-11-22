@@ -9,6 +9,7 @@ import { dropCollectibleMark } from '@/lib/drops'
 import { dropAvailabilityLine, isDropLive } from '@/lib/drop-window'
 import {
   CHRISTMAS_ORDER_BY_LABEL,
+  crashWeekPromoLine,
   formatPriceWithShipping,
   formatShippingOnly,
   isBeforeChristmasCutoff,
@@ -35,6 +36,19 @@ export default function DropBuy({ drop, product }: Props) {
   const live = isDropLive(drop)
   const availability = dropAvailabilityLine(drop)
   const priceLabel = formatPriceWithShipping(product.productType)
+  const promoLine = crashWeekPromoLine()
+  const [linkCopied, setLinkCopied] = useState(false)
+
+  const copyProductLink = async () => {
+    try {
+      const url = `${window.location.origin}/drop/${product.slug}`
+      await navigator.clipboard.writeText(url)
+      setLinkCopied(true)
+      window.setTimeout(() => setLinkCopied(false), 2000)
+    } catch {
+      setLinkCopied(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -143,6 +157,9 @@ export default function DropBuy({ drop, product }: Props) {
           {product.title}
         </h1>
         <p className="mt-1 text-sm text-neutral-500">{priceLabel}</p>
+        {promoLine && (
+          <p className="mt-1 text-xs font-semibold text-neutral-900">{promoLine}</p>
+        )}
         {availability && (
           <p className="mt-1 text-xs font-medium text-neutral-700">{availability}</p>
         )}
@@ -236,6 +253,21 @@ export default function DropBuy({ drop, product }: Props) {
           </button>
         </div>
         <p className="px-1 text-center text-[11px] leading-relaxed text-neutral-400">{TRUST_LINE}</p>
+        <div className="flex shrink-0 gap-2">
+          <button
+            type="button"
+            onClick={() => void copyProductLink()}
+            className="flex-1 rounded-md border border-neutral-200 bg-white px-3 py-2 text-sm text-neutral-700 hover:border-neutral-400"
+          >
+            {linkCopied ? 'Link copied' : 'Copy link to share'}
+          </button>
+          <Link
+            href="/gift"
+            className="flex-1 rounded-md border border-neutral-200 bg-white px-3 py-2 text-center text-sm text-neutral-700 hover:border-neutral-400"
+          >
+            Gift instead
+          </Link>
+        </div>
       </div>
     </main>
   )

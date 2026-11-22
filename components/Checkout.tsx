@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { GeneratedDesign, ColorOption } from '@/lib/merch'
 import { getProductPricing, isMugSize, SHIRT_SIZES, type ProductType } from '@/lib/products'
+import { applyShippingPromo } from '@/lib/promo'
 import { mugBlankSrc } from '@/lib/mug-overlay'
 import { validateShippingAddress } from '@/lib/validate-address'
 import PaymentOptions from './PaymentOptions'
@@ -120,7 +121,8 @@ export default function Checkout({
     [billingSameAsShipping, billingInfo, shippingInfo]
   )
 
-  const { basePrice, shippingFlatRate: shippingCost } = getProductPricing(productType)
+  const { basePrice, shippingFlatRate } = getProductPricing(productType)
+  const shippingCost = applyShippingPromo(Math.round(shippingFlatRate * 100)) / 100
   const [estimatedTax, setEstimatedTax] = useState(0)
   const subtotal = basePrice * quantity
   const totalPrice = (subtotal + shippingCost + estimatedTax).toFixed(2)
